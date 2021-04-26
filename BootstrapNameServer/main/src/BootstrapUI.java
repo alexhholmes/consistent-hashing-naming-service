@@ -11,25 +11,29 @@ public class BootstrapUI implements Runnable {
         scan = new Scanner(System.in);
     }
 
+    /*
+     * Prints response and reprints user input prompt.
+     */
     public void printResponse(String response) {
         if (response != null) {
-            syncPrint(response, PROMPT);
+            syncPrint("\n", response, "\n", PROMPT);
         }
     }
 
-    private void syncPrint(String... lines) {
+    /*
+     * Synchronized print of each string arg.
+     */
+    private void syncPrint(String... strings) {
         synchronized (System.out) {
             // Print response lines
-            for (String line: lines) {
-                System.out.println(line);
+            for (String string: strings) {
+                System.out.print(string);
             }
         }
     }
 
     private boolean readUserInput() {
-        synchronized (System.out) {
-            System.out.println(PROMPT);
-        }
+        syncPrint(PROMPT);
         String[] input = scan.nextLine().split(" ");
         String command = input[0].toLowerCase();
 
