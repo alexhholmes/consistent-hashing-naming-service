@@ -1,3 +1,5 @@
+import com.sun.net.httpserver.Authenticator;
+
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -7,6 +9,8 @@ import java.net.Socket;
 import java.util.HashMap;
 
 public class BootstrapNameServer implements Runnable {
+    private BootstrapUI bootstrapUI;
+
     private ServerSocket serverSocket;
     private int bootstrapID;
     private int bootstrapPort;
@@ -107,30 +111,34 @@ public class BootstrapNameServer implements Runnable {
         }
     }
 
-    private void lookupKeyResponse(final int key, final String object, final int[] visitedServers) {
-        System.out.println("Key: " + key);
+    private String lookupKeyResponse(final int key, final String object, final int[] visitedServers) {
+        String response = "Key: " + key + "\n";
         if (object == null) {
-            System.out.println("Key not found");
+            response += "Key not found";
         } else {
-            System.out.println("Value: " + object);
+            response += "Value: " + object;
         }
-        System.out.println("Visited Servers: " + visitedToString(visitedServers));
+        response += "\nVisited Servers: " + visitedToString(visitedServers);
+
+        return response;
     }
 
-    private void insertValueResponse(final int key, final int[] visitedServers) {
-        System.out.println("Key: " + key);
-        System.out.println("Inserted on server " + visitedServers[visitedServers.length - 1]);
-        System.out.println("Visited Servers: " + visitedToString(visitedServers));
+    private String insertValueResponse(final int key, final int[] visitedServers) {
+        return "Key: " + key + "\n" +
+                "Inserted on Server: " + visitedServers[visitedServers.length - 1] + "\n" +
+                "Visited Servers: " + visitedToString(visitedServers);
     }
 
-    private void deleteKeyResponse(final int key, final boolean deleted, final int[] visitedServers) {
-        System.out.println("Key: " + key);
+    private String deleteKeyResponse(final int key, final boolean deleted, final int[] visitedServers) {
+        String response = "Key: " + key + "\n";
         if (deleted) {
-            System.out.println("Successful deletion");
+            response += "Successful deletion";
         } else {
-            System.out.println("Key not found");
+            response += "Key not found";
         }
-        System.out.println("Visited Servers: " + visitedToString(visitedServers));
+        response += "\nVisited Servers: " + visitedToString(visitedServers);
+
+        return response;
     }
 
     /*
@@ -165,53 +173,59 @@ public class BootstrapNameServer implements Runnable {
      * Handles commands from name servers.
      */
     private void handleCommand(String command, ObjectInputStream inputStream, ObjectOutputStream outputStream) {
+        String response = null;
+
         try {
             if (command.equals("lookup")) {
                 // Lookup failed
                 int key = inputStream.readInt();
                 int[] visitedServers = (int[]) inputStream.readObject();
-                lookupKeyResponse(key, null, visitedServers);
+                response = lookupKeyResponse(key, null, visitedServers);
             } else if (command.equals("lookup_found")) {
                 int key = inputStream.readInt();
                 String object = inputStream.readUTF();
                 int[] visitedServers = (int[]) inputStream.readObject();
-                lookupKeyResponse(key, object, visitedServers);
+                response = lookupKeyResponse(key, object, visitedServers);
             } else if (command.equals("insert")) {
                 // Insert failed somehow?
                 inputStream.readUTF();
                 inputStream.readInt();
                 inputStream.readObject();
-                System.err.println("Insert failed, message reached back to bootstrap server.");
+                response = "Insert failed, message reached back to bootstrap server.";
             } else if (command.equals("insert_found")) {
                 int key = inputStream.readInt();
                 int[] visitedServers = (int[]) inputStream.readObject();
-                insertValueResponse(key, visitedServers);
+                response = insertValueResponse(key, visitedServers);
             } else if (command.equals("delete")) {
                 // Delete failed
                 int key = inputStream.readInt();
                 int[] visitedServers = (int[]) inputStream.readObject();
-                deleteKeyResponse(key, false, visitedServers);
+                response = deleteKeyResponse(key, false, visitedServers);
             } else if (command.equals("delete_found")) {
                 int key = inputStream.readInt();
                 int[] visitedServers = (int[]) inputStream.readObject();
-                deleteKeyResponse(key, true, visitedServers);
+                response = deleteKeyResponse(key, true, visitedServers);
             } else if (command.equals("enter")) {
                 // Register new name server
                 nameServerEnter(inputStream, outputStream);
+                response = null;
             } else if (command.equals("exit")) {
                 // Deregister name server
                 nameServerExit(inputStream, outputStream);
+                response = null;
             } else {
-                System.err.println("Unknown command received from: " + serverSocket.getInetAddress().toString());
+                response = "Unknown command received from: " + serverSocket.getInetAddress().toString();
             }
         } catch (IOException e) {
             // Close streams & socket, let client crash
-            System.err.println("[ERROR] New connection i/o failed.");
+            response = "[ERROR] New connection i/o failed.";
         } catch (ClassNotFoundException e) {
             // Should not happen, exit program
             System.err.println("[ERROR] Input stream failure.");
             System.exit(1);
         }
+
+        bootstrapUI.printResponse(response);
     }
 
     /*
@@ -253,6 +267,10 @@ public class BootstrapNameServer implements Runnable {
 
     @Override
     public void run() {
+        // Start UI thread
+        bootstrapUI = new BootstrapUI(this);
+        new Thread(bootstrapUI).start();
+
         try {
             serverSocket = new ServerSocket(bootstrapPort);
             acceptConnections();

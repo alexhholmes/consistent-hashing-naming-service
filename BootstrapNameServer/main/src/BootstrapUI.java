@@ -1,18 +1,38 @@
 import java.util.Scanner;
 
 public class BootstrapUI implements Runnable {
-    final String prompt = ">_ ";
+    private final String PROMPT = ">_ ";
 
-    BootstrapNameServer bootstrapServer;
-    Scanner scan;
+    private BootstrapNameServer bootstrapServer;
+    private Scanner scan;
 
     public BootstrapUI(BootstrapNameServer bootstrapServer) {
         this.bootstrapServer = bootstrapServer;
         scan = new Scanner(System.in);
     }
 
+    public void printResponse(String response) {
+        if (response != null) {
+            syncPrint(response);
+        }
+    }
+
+    private void syncPrint(String... lines) {
+        synchronized (System.out) {
+            // Print response lines
+            for (String line: lines) {
+                System.out.println(line);
+            }
+
+            // Reprint prompt and scan buffer after printing response
+            System.out.print(PROMPT);
+        }
+    }
+
     private boolean readUserInput() {
-        System.out.print(prompt);
+        synchronized (System.out) {
+            System.out.println(PROMPT);
+        }
         String[] input = scan.nextLine().split(" ");
         String command = input[0].toLowerCase();
 
@@ -30,7 +50,7 @@ public class BootstrapUI implements Runnable {
             int key = Integer.parseInt(input[1]);
             bootstrapServer.deleteKey(key);
         } else {
-            System.out.println("[ERROR] Unknown command.");
+            syncPrint("[ERROR] Unknown command.");
         }
 
         return true;
