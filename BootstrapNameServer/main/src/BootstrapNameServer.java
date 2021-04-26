@@ -35,12 +35,6 @@ public class BootstrapNameServer implements Runnable {
         }
     }
 
-    /**
-     * Immediately returns the key's value if it is found in this name server else it
-     * returns null.
-     * @param key
-     * @return null if the key is not on this name server
-     */
     public void lookupKey(final int key) {
         final int[] visitedServers = { 0 };
         if (objects.containsKey(key)) {
@@ -139,14 +133,90 @@ public class BootstrapNameServer implements Runnable {
         System.out.println("Visited Servers: " + visitedToString(visitedServers));
     }
 
-    private void nameServerEnter() {
+    /*
+     * Adds name server to system.
+     */
+    private void nameServerEnter(ObjectInputStream inputStream, ObjectOutputStream outputStream) {
+        try {
+            if (successor == bootstrapID) {
+                // First name server added
+                successor = inputStream.readInt();
+                rangeMin = successor + 1;
+                // TODO
+            } else {
 
+
+            }
+        } catch (IOException e) {
+            // TODO
+        }
+        // Streams are closed by calling function
     }
 
-    private void nameServerExit() {
+    /*
+     * Remove name server from system.
+     */
+    private void nameServerExit(ObjectInputStream inputStream, ObjectOutputStream outputStream) {
 
+        // Streams are closed by calling function
     }
 
+    /*
+     * Handles commands from name servers.
+     */
+    private void handleCommand(String command, ObjectInputStream inputStream, ObjectOutputStream outputStream) {
+        try {
+            if (command.equals("lookup")) {
+                // Lookup failed
+                int key = inputStream.readInt();
+                int[] visitedServers = (int[]) inputStream.readObject();
+                lookupKeyResponse(key, null, visitedServers);
+            } else if (command.equals("lookup_found")) {
+                int key = inputStream.readInt();
+                String object = inputStream.readUTF();
+                int[] visitedServers = (int[]) inputStream.readObject();
+                lookupKeyResponse(key, object, visitedServers);
+            } else if (command.equals("insert")) {
+                // Insert failed somehow?
+                inputStream.readUTF();
+                inputStream.readInt();
+                inputStream.readObject();
+                System.err.println("Insert failed, message reached back to bootstrap server.");
+            } else if (command.equals("insert_found")) {
+                int key = inputStream.readInt();
+                int[] visitedServers = (int[]) inputStream.readObject();
+                insertValueResponse(key, visitedServers);
+            } else if (command.equals("delete")) {
+                // Delete failed
+                int key = inputStream.readInt();
+                int[] visitedServers = (int[]) inputStream.readObject();
+                deleteKeyResponse(key, false, visitedServers);
+            } else if (command.equals("delete_found")) {
+                int key = inputStream.readInt();
+                int[] visitedServers = (int[]) inputStream.readObject();
+                deleteKeyResponse(key, true, visitedServers);
+            } else if (command.equals("enter")) {
+                // Register new name server
+                nameServerEnter(inputStream, outputStream);
+            } else if (command.equals("exit")) {
+                // Deregister name server
+                nameServerExit(inputStream, outputStream);
+            } else {
+                System.err.println("Unknown command received from: " + serverSocket.getInetAddress().toString());
+            }
+        } catch (IOException e) {
+            // Close streams & socket, let client crash
+            System.err.println("[ERROR] New connection i/o failed.");
+        } catch (ClassNotFoundException e) {
+            // Should not happen, exit program
+            System.err.println("[ERROR] Input stream failure.");
+            System.exit(1);
+        }
+    }
+
+    /*
+     * Handles incoming connections from name servers.
+     */
     private void acceptConnections() {
         while (true) {
             try {
@@ -155,49 +225,24 @@ public class BootstrapNameServer implements Runnable {
                 ObjectOutputStream outputStream = new ObjectOutputStream(sock.getOutputStream());
 
                 String command = inputStream.readUTF();
-                if (command == "lookup") {
-                    // Lookup failed
-                    int key = inputStream.readInt();
-                    int[] visitedServers = (int[]) inputStream.readObject();
-                    lookupKeyResponse(key, null, visitedServers);
-                } else if (command == "lookup_found") {
-                    int key = inputStream.readInt();
-                    String object = inputStream.readUTF();
-                    int[] visitedServers = (int[]) inputStream.readObject();
-                    lookupKeyResponse(key, object, visitedServers);
-                } else if (command == "insert") {
-                    // Insert failed somehow?
-                    System.err.println("Insert failed, message reached back to bootstrap server");
-                    System.exit(1);
-                } else if (command == "insert_found") {
-                    int key = inputStream.readInt();
-                    int[] visitedServers = (int[]) inputStream.readObject();
-                    insertValueResponse(key, visitedServers);
-                } else if (command == "delete") {
-                    // Delete failed
-                    int key = inputStream.readInt();
-                    int[] visitedServers = (int[]) inputStream.readObject();
-                    deleteKeyResponse(key, false, visitedServers);
-                } else if (command == "delete_found") {
-                    int key = inputStream.readInt();
-                    int[] visitedServers = (int[]) inputStream.readObject();
-                    deleteKeyResponse(key, true, visitedServers);
-                } else if (command == "enter") {
-                    // Register new name server
+                handleCommand(command, inputStream, outputStream);
 
-                } else if (command == "exit") {
-                    // Deregister name server
-
-                } else {
-                    System.err.println("Unknown command received from: " + serverSocket.getInetAddress().toString());
-                    System.exit(1);
+                try {
+                    inputStream.close();
+                    outputStream.close();
+                    serverSocket.close();
+                } catch (IOException ex) {
+                    System.err.println("[ERROR] Error closing streams & socket of new connection.");
                 }
-            } catch (IOException | ClassNotFoundException e) {
+            } catch (IOException e) {
                 System.err.println("[ERROR] New connection failed.");
             }
         }
     }
 
+    /*
+     * Returns a space separated String of ints.
+     */
     private String visitedToString(final int[] visitedServers) {
         String visitedString = "";
         for (int i: visitedServers) {
