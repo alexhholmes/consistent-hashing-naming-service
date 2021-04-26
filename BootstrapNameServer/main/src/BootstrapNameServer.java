@@ -9,20 +9,28 @@ import java.net.Socket;
 import java.util.HashMap;
 
 public class BootstrapNameServer implements Runnable {
+
     private BootstrapUI bootstrapUI;
 
+    // Name Servers Connection
     private ServerSocket serverSocket;
     private int bootstrapID;
     private int bootstrapPort;
 
+    // Local Object Storage
     private HashMap<Integer, String> objects;
     private int rangeMin;
     private int rangeMax;
 
-    private int predecessor;
+    // Successor
     private int successor;
     private InetAddress successorAddr;
     private int successorPort;
+
+    // Predecessor
+    private int predecessor;
+    private InetAddress predecessorAddr;
+    private int predecessorPort;
 
     public BootstrapNameServer(int bootstrapID, int bootstrapPort, HashMap<Integer, String> initialObjects) {
         this.bootstrapID = bootstrapID;
@@ -39,6 +47,11 @@ public class BootstrapNameServer implements Runnable {
         }
     }
 
+    /*
+     * Looks up a key in local storage, if key is not in key local key range, looks for it
+     * in the distributed system.
+     */
+    // TODO Do check for local key range
     public void lookupKey(final int key) {
         final int[] visitedServers = { 0 };
         if (objects.containsKey(key)) {
@@ -63,6 +76,11 @@ public class BootstrapNameServer implements Runnable {
         }
     }
 
+    /*
+     * Inserts a value in local storage, if local storage is not in key range, inserts it
+     * in the distributed system.
+     */
+    // TODO Do check for local key range
     public void insertValue(int key, String value) {
         final int[] visitedServers = { 0 };
         if (key >= rangeMin && key <= rangeMax) {
@@ -86,6 +104,11 @@ public class BootstrapNameServer implements Runnable {
         }
     }
 
+    /*
+     * Deletes a key in local storage, if local storage is not in key range, deletes it in
+     * the distributed system.
+     */
+    // TODO Do check for local key range
     public void deleteKey(int key) {
         final int[] visitedServers = { 0 };
         if (objects.containsKey(key)) {
@@ -111,6 +134,9 @@ public class BootstrapNameServer implements Runnable {
         }
     }
 
+    /*
+     * Returns a formatted lookup response String.
+     */
     private String lookupKeyResponse(final int key, final String object, final int[] visitedServers) {
         String response = "Key: " + key + "\n";
         if (object == null) {
@@ -123,12 +149,18 @@ public class BootstrapNameServer implements Runnable {
         return response;
     }
 
+    /*
+     * Returns a formatted insert response String.
+     */
     private String insertValueResponse(final int key, final int[] visitedServers) {
         return "Key: " + key + "\n" +
                 "Inserted on Server: " + visitedServers[visitedServers.length - 1] + "\n" +
                 "Visited Servers: " + visitedToString(visitedServers);
     }
 
+    /*
+     * Returns a formatted delete response String.
+     */
     private String deleteKeyResponse(final int key, final boolean deleted, final int[] visitedServers) {
         String response = "Key: " + key + "\n";
         if (deleted) {
@@ -149,10 +181,8 @@ public class BootstrapNameServer implements Runnable {
             if (successor == bootstrapID) {
                 // First name server added
                 successor = inputStream.readInt();
-                rangeMin = successor + 1;
                 // TODO
             } else {
-
 
             }
         } catch (IOException e) {
