@@ -13,7 +13,7 @@ public class BootstrapUI implements Runnable {
 
     public void printResponse(String response) {
         if (response != null) {
-            syncPrint(response);
+            syncPrint(response, PROMPT);
         }
     }
 
@@ -23,9 +23,6 @@ public class BootstrapUI implements Runnable {
             for (String line: lines) {
                 System.out.println(line);
             }
-
-            // Reprint prompt and scan buffer after printing response
-            System.out.print(PROMPT);
         }
     }
 
