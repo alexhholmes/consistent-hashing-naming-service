@@ -3,6 +3,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Arrays;
 import java.util.HashMap;
 
 public class NameServer implements Runnable {
@@ -17,22 +18,58 @@ public class NameServer implements Runnable {
     private int rangeMin;
     private int rangeMax;
 
+    volatile boolean connected;
     volatile boolean exit;
 
     public NameServer(int nameServerID, int nameServerPort, String bootstrapServerAddr, int bootstrapServerPort) {
         this.nameServerID = nameServerID;
         this.nameServerPort = nameServerPort;
+        this.connected = false;
     }
 
-    private String lookupKey(int key, int[] visitedServers) {
-        
+    private String buildLogMessage(String command, int key, String value, int[] visitedServers) {
+        final String LOG = "[LOG]: ";
+        final String TAB = "\t";
+
+        String logMessage = LOG + TAB + command + TAB + key + TAB;
+        if (value != null) {
+            logMessage += value + TAB;
+        }
+        logMessage += visitedToString(visitedServers) + "\n";
+
+        return logMessage;
     }
 
-    private String insertValue(int key, String object, int[] visitedServers) {
-
+    private String buildLogMessage(String command, int key, int[] visitedServers) {
+        return buildLogMessage(command, key, null, visitedServers);
     }
 
-    private String deleteKey(int key, int[] visitedServers) {
+    private String lookupKey(final int key, int[] visitedServers) {
+        // Append ID to visitedServers
+        int length = visitedServers.length;
+        visitedServers = Arrays.copyOf(visitedServers, length - 1);
+        visitedServers[length] = nameServerID;
+
+        String message = buildLogMessage("lookup", key, visitedServers);
+
+        if (objects.containsKey(key)) {
+            // Key found, message bootstrap server
+            String value = objects.get(key);
+            // TODO
+            message += "Key found, messaging bootstrap server";
+        } else {
+            // Forward message to successor
+            // TODO
+            message += "Key not found, forwarding message to successor";
+        }
+
+        return message;
+    }
+
+    private String insertValue(final int key, final String object, int[] visitedServers) {
+    }
+
+    private String deleteKey(final int key, int[] visitedServers) {
 
     }
 
@@ -94,6 +131,22 @@ public class NameServer implements Runnable {
                 System.err.println("[ERROR] New connection failed.");
             }
         }
+    }
+
+    /*
+     * Returns a space separated String of ints.
+     */
+    private String visitedToString(final int[] visitedServers) {
+        StringBuilder visitedString = new StringBuilder("");
+        visitedString.ensureCapacity(visitedServers.length * 2 + 1);
+
+        for (int id : visitedServers) {
+            visitedString.append(id);
+            visitedString.append(" ");
+        }
+        visitedString.deleteCharAt(visitedString.length() - 1);
+
+        return visitedString.toString();
     }
 
     @Override
