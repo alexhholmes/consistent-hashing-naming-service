@@ -246,6 +246,20 @@ public class BootstrapNameServer implements Runnable {
 
     /*
      * Handles commands from name servers.
+     *
+     * lookup       | Lookup went to all name servers, lookup failed.
+     * lookup_found | Lookup successful, name server directly contacted bootstrap server.
+     * insert       | Insert went to all name servers, insert failed. Should not happen,
+     *              |  for debugging purposes!
+     * insert_found | Insert successful, name server directly contacted bootstrap server.
+     * delete       | Delete went to all name servers, delete failed, key/value not found.
+     * delete_found | Delete successful, name server directly contacted bootstrap server.
+     * enter        | New name server entering system.
+     * new_successor| New name server contacts its new predecessor. This name server
+     *              |  updates its successor.
+     * exit         | Removes a name server from the system.
+     * [UNKNOWN]    | Prints "unknown command" message, continues. Should not happen, for
+     *              |  debugging purposes!
      */
     private void handleCommand(String command, ObjectInputStream inputStream, ObjectOutputStream outputStream) {
         String response = null;
