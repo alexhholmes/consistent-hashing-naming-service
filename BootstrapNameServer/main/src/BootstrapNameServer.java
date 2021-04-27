@@ -49,7 +49,7 @@ public class BootstrapNameServer implements Runnable {
 
     /*
      * Looks up a key in local storage, if key is not in key local key range, looks for it
-     * in the distributed system.
+     * in the distributed system. CALLED BY BOOTSTRAP UI.
      */
     // TODO Do check for local key range
     public void lookupKey(final int key) {
@@ -80,7 +80,7 @@ public class BootstrapNameServer implements Runnable {
 
     /*
      * Inserts a value in local storage, if local storage is not in key range, inserts it
-     * in the distributed system.
+     * in the distributed system. CALLED BY BOOTSTRAP UI.
      */
     // TODO Do check for local key range
     public void insertValue(int key, String value) {
@@ -109,7 +109,7 @@ public class BootstrapNameServer implements Runnable {
 
     /*
      * Deletes a key in local storage, if local storage is not in key range, deletes it in
-     * the distributed system.
+     * the distributed system. CALLED BY BOOTSTRAP UI.
      */
     // TODO Do check for local key range
     public void deleteKey(int key) {
@@ -279,7 +279,7 @@ public class BootstrapNameServer implements Runnable {
                 try {
                     inputStream.close();
                     outputStream.close();
-                    serverSocket.close();
+                    sock.close();
                 } catch (IOException ex) {
                     System.err.println("[ERROR] Error closing streams & socket of new connection.");
                 }
