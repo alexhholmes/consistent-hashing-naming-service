@@ -1,14 +1,15 @@
 import java.util.Scanner;
 
 public class BootstrapUI implements Runnable {
-    private final String PROMPT = ">_ ";
+    private final String PROMPT;
 
     private BootstrapNameServer bootstrapServer;
     private Scanner scan;
 
-    public BootstrapUI(BootstrapNameServer bootstrapServer) {
+    public BootstrapUI(BootstrapNameServer bootstrapServer, int bootstrapID) {
         this.bootstrapServer = bootstrapServer;
         scan = new Scanner(System.in);
+        PROMPT = "bootstrap [" + bootstrapID + "] >_ ";
     }
 
     /*

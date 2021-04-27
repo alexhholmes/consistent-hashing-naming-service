@@ -1,5 +1,3 @@
-import com.sun.net.httpserver.Authenticator;
-
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -318,7 +316,7 @@ public class BootstrapNameServer implements Runnable {
     @Override
     public void run() {
         // Start UI thread
-        bootstrapUI = new BootstrapUI(this);
+        bootstrapUI = new BootstrapUI(this, bootstrapID);
         new Thread(bootstrapUI).start();
 
         try {
