@@ -8,7 +8,7 @@ import java.util.HashMap;
 
 public class NameServer implements Runnable {
 
-    // UI
+    private NameServerUI nameServerUI;
 
     private int nameServerID;
     private int nameServerPort;
@@ -151,6 +151,9 @@ public class NameServer implements Runnable {
 
     @Override
     public void run() {
+        nameServerUI = new NameServerUI(this, nameServerID);
+        new Thread(nameServerUI).start();
+
         try {
             incomingSocket = new ServerSocket(nameServerPort);
             acceptConnections();
