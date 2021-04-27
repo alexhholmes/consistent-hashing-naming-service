@@ -27,7 +27,9 @@ public class BootstrapUI implements Runnable {
         synchronized (System.out) {
             // Print response lines
             for (String string: strings) {
-                System.out.print(string);
+                if (string != null) {
+                    System.out.print(string);
+                }
             }
         }
     }
@@ -38,7 +40,7 @@ public class BootstrapUI implements Runnable {
         String command = input[0].toLowerCase();
 
         if (command.equals("quit")) {
-            // TODO handle bootstrap server quit
+            bootstrapServer.exit();
             return false;
         } else if (command.equals("lookup")) {
             int key = Integer.parseInt(input[1]);

@@ -223,8 +223,8 @@ public class BootstrapNameServer implements Runnable {
                 response = lookupKeyResponse(key, object, visitedServers);
             } else if (command.equals("insert")) {
                 // Insert failed somehow?
-                inputStream.readUTF();
                 inputStream.readInt();
+                inputStream.readUTF();
                 inputStream.readObject();
                 response = "Insert failed, message reached back to bootstrap server.";
             } else if (command.equals("insert_found")) {
@@ -249,7 +249,7 @@ public class BootstrapNameServer implements Runnable {
                 nameServerExit(inputStream, outputStream);
                 response = null;
             } else {
-                response = "Unknown command received from: " + serverSocket.getInetAddress().toString();
+                response = "Unknown command received from predecessor(Name Server " + predecessor + ").";
             }
         } catch (IOException e) {
             // Close streams & socket, let client crash
@@ -287,6 +287,16 @@ public class BootstrapNameServer implements Runnable {
                 System.err.println("[ERROR] New connection failed.");
             }
         }
+    }
+
+    public void exit() {
+        try {
+            serverSocket.close();
+            // How did I handle this in proj 3?
+        } catch (IOException e) {
+
+        }
+        // TODO Tell successor to exit
     }
 
     /*
