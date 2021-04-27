@@ -303,11 +303,16 @@ public class BootstrapNameServer implements Runnable {
      * Returns a space separated String of ints.
      */
     private String visitedToString(final int[] visitedServers) {
-        String visitedString = "";
-        for (int i: visitedServers) {
-            visitedString += i + " ";
+        StringBuilder visitedString = new StringBuilder("");
+        visitedString.ensureCapacity(visitedServers.length * 2 + 1);
+
+        for (int id : visitedServers) {
+            visitedString.append(id);
+            visitedString.append(" ");
         }
-        return visitedString;
+        visitedString.deleteCharAt(visitedString.length() - 1);
+
+        return visitedString.toString();
     }
 
     @Override
