@@ -56,10 +56,12 @@ public class BootstrapNameServer implements Runnable {
         final int[] visitedServers = { 0 };
         if (objects.containsKey(key)) {
             // Key found on this server, immediately reply to user
-            lookupKeyResponse(key, objects.get(key), visitedServers);
+            String response = lookupKeyResponse(key, objects.get(key), visitedServers);
+            bootstrapUI.printResponse(response);
         } else if (successor == bootstrapID) {
             // No other name servers and object not found, immediately reply to user
-            lookupKeyResponse(key, null, visitedServers);
+            String response = lookupKeyResponse(key, null, visitedServers);
+            bootstrapUI.printResponse(response);
         } else {
             // Pass lookup message to successor
             try {
@@ -86,7 +88,8 @@ public class BootstrapNameServer implements Runnable {
         if (key >= rangeMin && key <= rangeMax) {
             // Store object on this server
             objects.put(key, value);
-            insertValueResponse(key, visitedServers);
+            String response = insertValueResponse(key, visitedServers);
+            bootstrapUI.printResponse(response);
         } else {
             // Pass insert message to successor
             try {
@@ -114,10 +117,12 @@ public class BootstrapNameServer implements Runnable {
         if (objects.containsKey(key)) {
             // Key found on this server, immediately reply to user
             objects.remove(key);
-            deleteKeyResponse(key, true, visitedServers);
+            String response = deleteKeyResponse(key, true, visitedServers);
+            bootstrapUI.printResponse(response);
         } else if (successor == bootstrapID) {
             // No other name servers and object not found, immediately reply to user
-            deleteKeyResponse(key, false, visitedServers);
+            String response = deleteKeyResponse(key, false, visitedServers);
+            bootstrapUI.printResponse(response);
         } else {
             // Pass delete message to successor
             try {

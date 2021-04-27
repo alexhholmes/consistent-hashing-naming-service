@@ -51,7 +51,7 @@ public class BootstrapUI implements Runnable {
             int key = Integer.parseInt(input[1]);
             bootstrapServer.deleteKey(key);
         } else {
-            syncPrint("[ERROR] Unknown command.");
+            syncPrint("[ERROR] Unknown command.\n");
         }
 
         return true;
