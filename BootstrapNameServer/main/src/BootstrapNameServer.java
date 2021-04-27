@@ -176,30 +176,72 @@ public class BootstrapNameServer implements Runnable {
         return response;
     }
 
+    private void moveStoredObjects(ObjectOutputStream outputStream) throws IOException { // TODO RANGE?
+
+    }
+
+    private void immediateEntry(ObjectOutputStream outputStream) throws IOException {
+        // Successfully added immediately; expect key range, predecessor/successor
+        // IDs (bootstrap ID), IDs of traversed name servers (just bootstrap ID).
+        outputStream.writeBoolean(true);
+
+        // Key range TODO
+        outputStream.writeInt(0);
+        outputStream.writeInt(0);
+        // Successor/predecessor IDs
+        outputStream.writeInt(successor);
+        outputStream.writeInt(predecessor);
+    }
+
     /*
      * Adds name server to system.
      */
     private void nameServerEnter(ObjectInputStream inputStream, ObjectOutputStream outputStream) {
         try {
+            // Read new name server info
+            final int newID = inputStream.readInt();
+            final String newAddr = inputStream.readUTF();
+            final int newPort = inputStream.readInt();
+
             if (successor == bootstrapID) {
                 // First name server added
-                successor = inputStream.readInt();
-                // TODO
-            } else {
+                // Notify of immediate entry and send successor/predecessor info.
+                immediateEntry(outputStream);
+                moveStoredObjects(outputStream);
 
+                // Update bootstrap's successor/predecessor
+                successor = predecessor = newID;
+                successorAddr = predecessorAddr = InetAddress.getByName(newAddr);
+                successorPort = predecessorPort = newPort;
+                // TODO new range?
+            } else if (true) { // TODO
+                // New name server becomes predecessor to bootstrap server
+                immediateEntry(outputStream);
+                moveStoredObjects(outputStream);
+
+                predecessor = newID;
+                predecessorAddr = InetAddress.getByName(newAddr);
+                predecessorPort = newPort;
+            } else {
+                // Forwarding name server entry to successor
+                // Name server that becomes the new node's successor will directly contact
+                // the new node upon successful entry.
+                outputStream.writeBoolean(false);
             }
+
+            outputStream.flush();
         } catch (IOException e) {
             // TODO
         }
-        // Streams are closed by calling function
+        // Streams and socket are closed by calling function
     }
 
     /*
      * Remove name server from system.
      */
     private void nameServerExit(ObjectInputStream inputStream, ObjectOutputStream outputStream) {
-
-        // Streams are closed by calling function
+        // TODO
+        // Streams and socket are closed by calling function
     }
 
     /*
@@ -242,6 +284,8 @@ public class BootstrapNameServer implements Runnable {
                 // Register new name server
                 nameServerEnter(inputStream, outputStream);
                 response = null;
+            } else if (command.equals("new_successor")) {
+                // TODO
             } else if (command.equals("exit")) {
                 // Deregister name server
                 nameServerExit(inputStream, outputStream);
