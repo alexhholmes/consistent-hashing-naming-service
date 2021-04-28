@@ -1,9 +1,13 @@
+import apple.laf.JRSUIUtils;
+
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.TreeMap;
 
 public class BootstrapNameServer implements Runnable {
@@ -194,25 +198,46 @@ public class BootstrapNameServer implements Runnable {
         }
     }
 
-    private void moveStoredObjects(ObjectOutputStream outputStream) throws IOException { // TODO RANGE?
+    /*
+     * Moves the (inclusive) range of keys from this name server to the new name server.
+     */
+    private void moveStoredObjects(ObjectOutputStream outputStream, int rangeStart, int rangeEnd) throws IOException {
+        if (rangeStart < rangeEnd) {
+            NavigableMap<Integer, String> nameServerObjects = objects.subMap(rangeStart, true, rangeEnd, true);
+            outputStream.writeObject(new TreeMap<>(nameServerObjects));
 
+            // Removes this range of keys from the objects tree map, but not the new
+            // name server TreeMap.
+            nameServerObjects.clear();
+        } else {
+            // Okay, not gonna both implementing this because we can safely assume with
+            // the project description that bootstrap will ALWAYS be ID of 0. For some
+            // reason we still have to read the ID from the config file??? In the case
+            // were you'd actually want to implement this stuff, there are a bunch of
+            // lingering flaws in this project with not checking if a new index go out of
+            // bounds of the possible server IDs (Name server IDs allowed are between
+            // [0, 1024].
+        }
     }
 
-    private void immediateEntry(ObjectOutputStream outputStream, int newID) throws IOException {
-        // Successfully added immediately; expect key range, predecessor/successor
+    private void immediateEntry(ObjectOutputStream outputStream, boolean firstEntry) throws IOException {
+        // Successfully added immediately;
         // IDs (bootstrap ID), IDs of traversed name servers (just bootstrap ID).
         outputStream.writeBoolean(true);
+        outputStream.writeBoolean(firstEntry);
 
-        // Key range
-        int rangeStart = bootstrapID + 1;
-        int rangeEnd = newID;
-        outputStream.writeInt(0);
-        outputStream.writeInt(0);
-        // Successor/predecessor IDs
-        outputStream.writeInt(successor);
-        // TODO
-        outputStream.writeInt(predecessor);
-        // Visited servers
+        if (firstEntry) {
+            // Key range
+            int rangeStart = bootstrapID + 1;
+            outputStream.writeInt(rangeStart);
+        } else {
+            // New name server will contact bootstrap's predecessor and exchange info
+            outputStream.writeObject(predecessorAddr);
+            outputStream.writeInt(predecessorPort);
+        }
+
+        // Bootstrap server is successor
+        // Already knows IP and port #
         outputStream.writeInt(bootstrapID);
     }
 
@@ -238,8 +263,8 @@ public class BootstrapNameServer implements Runnable {
             if (successor == bootstrapID) {
                 // First name server added
                 // Notify of immediate entry and send successor/predecessor info.
-                immediateEntry(outputStream, newID);
-                moveStoredObjects(outputStream);
+                immediateEntry(outputStream, true);
+                moveStoredObjects(outputStream, bootstrapID + 1, newID);
 
                 // Update bootstrap's successor/predecessor
                 successor = predecessor = newID;
@@ -251,14 +276,19 @@ public class BootstrapNameServer implements Runnable {
                 // rangeEnd always stays the same; rangeEnd == bootstrapID
 
                 outputStream.flush();
-            } else if (betweenRange(newID, successor, bootstrapID)) { // Already checked if newID equals bootstrapID and successor ID
+            } else if (betweenRange(newID, successor, bootstrapID)) { // Already checked if newID does not equal bootstrapID & successorID
                 // New name server becomes predecessor to bootstrap server
-                immediateEntry(outputStream, newID);
-                moveStoredObjects(outputStream);
+                immediateEntry(outputStream, false);
+                moveStoredObjects(outputStream, predecessor + 1, newID);
 
+                // Update bootstrap's predecessor
                 predecessor = newID;
                 predecessorAddr = newAddr;
                 predecessorPort = newPort;
+
+                // Update bootstrap's key ranges
+                rangeStart = newID + 1;
+                // rangeEnd always stays the same; rangeEnd == bootstrapID
 
                 outputStream.flush();
             } else {
@@ -275,6 +305,10 @@ public class BootstrapNameServer implements Runnable {
             System.err.println("[ERROR] Connection problem occurred when adding new name server.");
         }
         // Streams and socket are closed by calling function
+    }
+
+    private void newSuccessor() {
+        // TODO
     }
 
     /*
@@ -340,7 +374,8 @@ public class BootstrapNameServer implements Runnable {
                 nameServerEnter(inputStream, outputStream);
                 response = null; // TODO?
             } else if (command.equals("new_successor")) {
-                // TODO
+                newSuccessor();
+                response = null;
             } else if (command.equals("exit")) {
                 // Deregister name server
                 nameServerExit(inputStream, outputStream);
