@@ -1,7 +1,7 @@
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Scanner;
+import java.util.TreeMap;
 
 public class Driver {
     public static void main(String[] args) throws IOException {
@@ -12,7 +12,7 @@ public class Driver {
         int bootstrapPort = Integer.parseInt(configScanner.nextLine());
 
         // Collect initial objects
-        HashMap<Integer, String> objects = new HashMap<>();
+        TreeMap<Integer, String> objects = new TreeMap<>();
         while (configScanner.hasNextLine()) {
             String[] line = configScanner.nextLine().split(" ");
             int key = Integer.parseInt(line[0]);

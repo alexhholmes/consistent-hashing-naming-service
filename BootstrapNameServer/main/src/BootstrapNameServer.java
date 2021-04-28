@@ -4,7 +4,7 @@ import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.HashMap;
+import java.util.TreeMap;
 
 public class BootstrapNameServer implements Runnable {
 
@@ -18,7 +18,7 @@ public class BootstrapNameServer implements Runnable {
     private int bootstrapPort;
 
     // Local Object Storage
-    private HashMap<Integer, String> objects;
+    private TreeMap<Integer, String> objects; // TreeMap allows for creating a sub-map from a range
     private int rangeStart;
     private int rangeEnd;
 
@@ -32,7 +32,7 @@ public class BootstrapNameServer implements Runnable {
     private InetAddress predecessorAddr;
     private int predecessorPort;
 
-    public BootstrapNameServer(int bootstrapID, int bootstrapPort, HashMap<Integer, String> initialObjects) {
+    public BootstrapNameServer(int bootstrapID, int bootstrapPort, TreeMap<Integer, String> initialObjects) {
         this.bootstrapID = bootstrapID;
         this.bootstrapPort = bootstrapPort;
         this.successor = bootstrapID;
@@ -43,7 +43,7 @@ public class BootstrapNameServer implements Runnable {
         this.rangeEnd = 0;
 
         if (initialObjects == null) {
-            objects = new HashMap<>();
+            objects = new TreeMap<>();
         }
     }
 
