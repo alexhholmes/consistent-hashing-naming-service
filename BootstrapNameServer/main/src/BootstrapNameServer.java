@@ -8,6 +8,8 @@ import java.util.HashMap;
 
 public class BootstrapNameServer implements Runnable {
 
+    public static final int MAX_OBJECT_AMOUNT = 1024;
+
     private BootstrapUI bootstrapUI;
 
     // Name Servers Connection
@@ -17,8 +19,8 @@ public class BootstrapNameServer implements Runnable {
 
     // Local Object Storage
     private HashMap<Integer, String> objects;
-    private int rangeMin;
-    private int rangeMax;
+    private int rangeStart;
+    private int rangeEnd;
 
     // Successor
     private int successor;
@@ -37,8 +39,8 @@ public class BootstrapNameServer implements Runnable {
         this.predecessor = bootstrapID;
 
         this.objects = initialObjects;
-        this.rangeMin = 0;
-        this.rangeMax = 1023;
+        this.rangeStart = 1;
+        this.rangeEnd = 0;
 
         if (initialObjects == null) {
             objects = new HashMap<>();
@@ -49,30 +51,22 @@ public class BootstrapNameServer implements Runnable {
      * Looks up a key in local storage, if key is not in key local key range, looks for it
      * in the distributed system. CALLED BY BOOTSTRAP UI.
      */
-    // TODO Do check for local key range
     public void lookupKey(final int key) {
         final int[] visitedServers = { 0 };
-        if (objects.containsKey(key)) {
-            // Key found on this server, immediately reply to user
-            String response = lookupKeyResponse(key, objects.get(key), visitedServers);
-            bootstrapUI.printResponse(response);
-        } else if (successor == bootstrapID) {
-            // No other name servers and object not found, immediately reply to user
-            String response = lookupKeyResponse(key, null, visitedServers);
-            bootstrapUI.printResponse(response);
+        if (betweenRange(key, rangeStart, rangeEnd)) {
+            // Key should be stored on this bootstrap server
+            if (objects.containsKey(key)) {
+                // Key found on this server, immediately reply to user
+                String response = lookupKeyResponse(key, objects.get(key), visitedServers);
+                bootstrapUI.printResponse(response);
+            } else {
+                // No other name servers and object not found, immediately reply to user
+                String response = lookupKeyResponse(key, null, visitedServers);
+                bootstrapUI.printResponse(response);
+            }
         } else {
             // Pass lookup message to successor
-            try {
-                Socket successorSocket = new Socket(successorAddr, successorPort);
-                ObjectOutputStream outputStream = new ObjectOutputStream(successorSocket.getOutputStream());
-                outputStream.writeUTF("lookup");
-                outputStream.writeInt(key);
-                outputStream.writeObject(visitedServers);
-                outputStream.close();
-                successorSocket.close();
-            } catch (IOException e) {
-                // TODO
-            }
+            forwardCommand("insert", key, visitedServers);
         }
     }
 
@@ -80,28 +74,16 @@ public class BootstrapNameServer implements Runnable {
      * Inserts a value in local storage, if local storage is not in key range, inserts it
      * in the distributed system. CALLED BY BOOTSTRAP UI.
      */
-    // TODO Do check for local key range
     public void insertValue(int key, String value) {
         final int[] visitedServers = { 0 };
-        if (key >= rangeMin && key <= rangeMax) {
+        if (betweenRange(key, rangeStart, rangeEnd)) {
             // Store object on this server
             objects.put(key, value);
             String response = insertValueResponse(key, visitedServers);
             bootstrapUI.printResponse(response);
         } else {
             // Pass insert message to successor
-            try {
-                Socket successorSocket = new Socket(successorAddr, successorPort);
-                ObjectOutputStream outputStream = new ObjectOutputStream(successorSocket.getOutputStream());
-                outputStream.writeUTF("insert");
-                outputStream.writeInt(key);
-                outputStream.writeUTF(value);
-                outputStream.writeObject(visitedServers);
-                outputStream.close();
-                successorSocket.close();
-            } catch (IOException e) {
-                // TODO
-            }
+            forwardCommand("insert", key, value, visitedServers);
         }
     }
 
@@ -109,31 +91,22 @@ public class BootstrapNameServer implements Runnable {
      * Deletes a key in local storage, if local storage is not in key range, deletes it in
      * the distributed system. CALLED BY BOOTSTRAP UI.
      */
-    // TODO Do check for local key range
     public void deleteKey(int key) {
         final int[] visitedServers = { 0 };
-        if (objects.containsKey(key)) {
-            // Key found on this server, immediately reply to user
-            objects.remove(key);
-            String response = deleteKeyResponse(key, true, visitedServers);
-            bootstrapUI.printResponse(response);
-        } else if (successor == bootstrapID) {
-            // No other name servers and object not found, immediately reply to user
-            String response = deleteKeyResponse(key, false, visitedServers);
-            bootstrapUI.printResponse(response);
+        if (betweenRange(key, rangeStart, rangeEnd)) {
+            if (objects.containsKey(key)) {
+                // Key found on this server, immediately reply to user
+                objects.remove(key);
+                String response = deleteKeyResponse(key, true, visitedServers);
+                bootstrapUI.printResponse(response);
+            } else {
+                // Object not found, immediately reply to user
+                String response = deleteKeyResponse(key, false, visitedServers);
+                bootstrapUI.printResponse(response);
+            }
         } else {
             // Pass delete message to successor
-            try {
-                Socket successorSocket = new Socket(successorAddr, successorPort);
-                ObjectOutputStream outputStream = new ObjectOutputStream(successorSocket.getOutputStream());
-                outputStream.writeUTF("delete");
-                outputStream.writeInt(key);
-                outputStream.writeObject(visitedServers);
-                outputStream.close();
-                successorSocket.close();
-            } catch (IOException e) {
-                // TODO
-            }
+            forwardCommand("delete", key, visitedServers);
         }
     }
 
@@ -176,21 +149,71 @@ public class BootstrapNameServer implements Runnable {
         return response;
     }
 
+    private void forwardCommand(String command, int key, int[] visitedServers) {
+        forwardCommand(command, key, null, visitedServers);
+    }
+
+    private void forwardCommand(String command, int key, String value, int[] visitedServers) {
+        try {
+            Socket successorSocket = new Socket(successorAddr, successorPort);
+            ObjectOutputStream outputStream = new ObjectOutputStream(successorSocket.getOutputStream());
+            outputStream.writeUTF(command);
+            outputStream.writeInt(key);
+            if (value != null) outputStream.writeUTF(value);
+            outputStream.writeObject(visitedServers);
+            try {
+                outputStream.close();
+                successorSocket.close();
+            } catch (IOException ex) {
+                System.err.println("[ERROR] Problem occurred when closing socket with successor name server.");
+            }
+        } catch (IOException e) {
+            System.err.println("[ERROR] Problem occurred when forwarding request to successor name server.");
+        }
+    }
+
+    private void forwardCommand(String command, int newNameServerID, InetAddress newNameServerAddr,
+                                int newNameServerPort, int[] visitedServers) {
+
+        try {
+            Socket successorSocket = new Socket(successorAddr, successorPort);
+            ObjectOutputStream outputStream = new ObjectOutputStream(successorSocket.getOutputStream());
+            outputStream.writeUTF(command);
+            outputStream.writeInt(newNameServerID);
+            outputStream.writeObject(newNameServerAddr);
+            outputStream.writeInt(newNameServerPort);
+            outputStream.writeObject(visitedServers);
+            try {
+                outputStream.close();
+                successorSocket.close();
+            } catch (IOException ex) {
+                System.err.println("[ERROR] Problem occurred when closing socket with successor name server.");
+            }
+        } catch (IOException e) {
+            System.err.println("[ERROR] Problem occurred when forwarding request to successor name server.");
+        }
+    }
+
     private void moveStoredObjects(ObjectOutputStream outputStream) throws IOException { // TODO RANGE?
 
     }
 
-    private void immediateEntry(ObjectOutputStream outputStream) throws IOException {
+    private void immediateEntry(ObjectOutputStream outputStream, int newID) throws IOException {
         // Successfully added immediately; expect key range, predecessor/successor
         // IDs (bootstrap ID), IDs of traversed name servers (just bootstrap ID).
         outputStream.writeBoolean(true);
 
-        // Key range TODO
+        // Key range
+        int rangeStart = bootstrapID + 1;
+        int rangeEnd = newID;
         outputStream.writeInt(0);
         outputStream.writeInt(0);
         // Successor/predecessor IDs
         outputStream.writeInt(successor);
+        // TODO
         outputStream.writeInt(predecessor);
+        // Visited servers
+        outputStream.writeInt(bootstrapID);
     }
 
     /*
@@ -200,38 +223,56 @@ public class BootstrapNameServer implements Runnable {
         try {
             // Read new name server info
             final int newID = inputStream.readInt();
-            final String newAddr = inputStream.readUTF();
+            final InetAddress newAddr = InetAddress.getByName(inputStream.readUTF());
             final int newPort = inputStream.readInt();
+
+            // Check if ID is in use
+            if ((newID == bootstrapID || newID == successor)) {
+                // Name server should print error and panic
+                outputStream.writeBoolean(false);
+                outputStream.flush();
+                return;
+            }
+            outputStream.writeBoolean(true);
 
             if (successor == bootstrapID) {
                 // First name server added
                 // Notify of immediate entry and send successor/predecessor info.
-                immediateEntry(outputStream);
+                immediateEntry(outputStream, newID);
                 moveStoredObjects(outputStream);
 
                 // Update bootstrap's successor/predecessor
                 successor = predecessor = newID;
-                successorAddr = predecessorAddr = InetAddress.getByName(newAddr);
+                successorAddr = predecessorAddr = newAddr;
                 successorPort = predecessorPort = newPort;
-                // TODO new range?
-            } else if (true) { // TODO
+
+                // Update bootstrap's key ranges
+                rangeStart = newID + 1;
+                // rangeEnd always stays the same; rangeEnd == bootstrapID
+
+                outputStream.flush();
+            } else if (betweenRange(newID, successor, bootstrapID)) { // Already checked if newID equals bootstrapID and successor ID
                 // New name server becomes predecessor to bootstrap server
-                immediateEntry(outputStream);
+                immediateEntry(outputStream, newID);
                 moveStoredObjects(outputStream);
 
                 predecessor = newID;
-                predecessorAddr = InetAddress.getByName(newAddr);
+                predecessorAddr = newAddr;
                 predecessorPort = newPort;
+
+                outputStream.flush();
             } else {
                 // Forwarding name server entry to successor
+                // New node should expect to receive entry info from a different name server
+                outputStream.writeBoolean(false);
+                outputStream.flush();
+
                 // Name server that becomes the new node's successor will directly contact
                 // the new node upon successful entry.
-                outputStream.writeBoolean(false);
+                forwardCommand("entry", newID, newAddr, newPort, new int[] { 0 });
             }
-
-            outputStream.flush();
         } catch (IOException e) {
-            // TODO
+            System.err.println("[ERROR] Connection problem occurred when adding new name server.");
         }
         // Streams and socket are closed by calling function
     }
@@ -297,13 +338,13 @@ public class BootstrapNameServer implements Runnable {
             } else if (command.equals("enter")) {
                 // Register new name server
                 nameServerEnter(inputStream, outputStream);
-                response = null;
+                response = null; // TODO?
             } else if (command.equals("new_successor")) {
                 // TODO
             } else if (command.equals("exit")) {
                 // Deregister name server
                 nameServerExit(inputStream, outputStream);
-                response = null;
+                response = null; // TODO?
             } else {
                 response = "Unknown command received from predecessor(Name Server " + predecessor + ").";
             }
@@ -353,6 +394,17 @@ public class BootstrapNameServer implements Runnable {
 
         }
         // TODO Tell successor to exit
+    }
+
+    /*
+     * Checks if an index is between (inclusive) the given range; range can overflow past
+     * MAX_OBJECT_COUNT.
+     */
+    private boolean betweenRange(int index, int rangeStart, int rangeEnd) throws IndexOutOfBoundsException {
+        // Index should be between 0 and (MAX_OBJECT_COUNT - 1)
+        if (index < 0 && index >= MAX_OBJECT_AMOUNT) throw new IndexOutOfBoundsException();
+
+        return index >= rangeStart && index <= rangeEnd;
     }
 
     /*
