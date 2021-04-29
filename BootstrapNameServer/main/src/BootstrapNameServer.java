@@ -1,12 +1,9 @@
-import apple.laf.JRSUIUtils;
-
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 
@@ -56,7 +53,7 @@ public class BootstrapNameServer implements Runnable {
      * in the distributed system. CALLED BY BOOTSTRAP UI.
      */
     public void lookupKey(final int key) {
-        final int[] visitedServers = { 0 };
+        final int[] visitedServers = new int[] { 0 };
         if (betweenRange(key, rangeStart, rangeEnd)) {
             // Key should be stored on this bootstrap server
             if (objects.containsKey(key)) {
@@ -70,7 +67,7 @@ public class BootstrapNameServer implements Runnable {
             }
         } else {
             // Pass lookup message to successor
-            forwardCommand("insert", key, visitedServers);
+            forwardCommand("lookup", key, visitedServers);
         }
     }
 
@@ -79,11 +76,11 @@ public class BootstrapNameServer implements Runnable {
      * in the distributed system. CALLED BY BOOTSTRAP UI.
      */
     public void insertValue(int key, String value) {
-        final int[] visitedServers = { 0 };
+        final int[] visitedServers = new int[] { 0 };
         if (betweenRange(key, rangeStart, rangeEnd)) {
             // Store object on this server
             objects.put(key, value);
-            String response = insertValueResponse(key, visitedServers);
+            String response = insertValueResponse(key, value, visitedServers);
             bootstrapUI.printResponse(response);
         } else {
             // Pass insert message to successor
@@ -96,7 +93,7 @@ public class BootstrapNameServer implements Runnable {
      * the distributed system. CALLED BY BOOTSTRAP UI.
      */
     public void deleteKey(int key) {
-        final int[] visitedServers = { 0 };
+        final int[] visitedServers = new int[] { 0 };
         if (betweenRange(key, rangeStart, rangeEnd)) {
             if (objects.containsKey(key)) {
                 // Key found on this server, immediately reply to user
@@ -132,8 +129,8 @@ public class BootstrapNameServer implements Runnable {
     /*
      * Returns a formatted insert response String.
      */
-    private String insertValueResponse(final int key, final int[] visitedServers) {
-        return "Key: " + key + "\n" +
+    private String insertValueResponse(final int key, String value, final int[] visitedServers) {
+        return "Key: " + key + " with value: " + value + "\n" +
                 "Inserted on Server: " + visitedServers[visitedServers.length - 1] + "\n" +
                 "Visited Servers: " + visitedToString(visitedServers);
     }
@@ -158,43 +155,51 @@ public class BootstrapNameServer implements Runnable {
     }
 
     private void forwardCommand(String command, int key, String value, int[] visitedServers) {
+        Socket successorSocket = null;
+        ObjectOutputStream outputStream = null;
+        ObjectInputStream inputStream = null;
+
         try {
-            Socket successorSocket = new Socket(successorAddr, successorPort);
-            ObjectOutputStream outputStream = new ObjectOutputStream(successorSocket.getOutputStream());
+            successorSocket = new Socket(successorAddr, successorPort);
+            outputStream = new ObjectOutputStream(successorSocket.getOutputStream());
+            inputStream = new ObjectInputStream(successorSocket.getInputStream());
+
             outputStream.writeUTF(command);
             outputStream.writeInt(key);
             if (value != null) outputStream.writeUTF(value);
-            outputStream.writeObject(visitedServers);
-            try {
-                outputStream.close();
-                successorSocket.close();
-            } catch (IOException ex) {
-                System.err.println("[ERROR] Problem occurred when closing socket with successor name server.");
-            }
+            outputStream.writeUnshared(visitedServers);
+
         } catch (IOException e) {
             System.err.println("[ERROR] Problem occurred when forwarding request to successor name server.");
+        } finally {
+            try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
+            try { if (inputStream != null) outputStream.close(); } catch (IOException e) { }
+            try { if (successorSocket != null) successorSocket.close(); } catch (IOException e) { }
         }
     }
 
     private void forwardCommand(String command, int newNameServerID, InetAddress newNameServerAddr,
                                 int newNameServerPort, int[] visitedServers) {
+        Socket successorSocket = null;
+        ObjectOutputStream outputStream = null;
+        ObjectInputStream inputStream = null;
 
         try {
-            Socket successorSocket = new Socket(successorAddr, successorPort);
-            ObjectOutputStream outputStream = new ObjectOutputStream(successorSocket.getOutputStream());
+            successorSocket = new Socket(successorAddr, successorPort);
+            outputStream = new ObjectOutputStream(successorSocket.getOutputStream());
+            inputStream = new ObjectInputStream(successorSocket.getInputStream());
+
             outputStream.writeUTF(command);
             outputStream.writeInt(newNameServerID);
-            outputStream.writeObject(newNameServerAddr);
+            outputStream.writeUnshared(newNameServerAddr);
             outputStream.writeInt(newNameServerPort);
-            outputStream.writeObject(visitedServers);
-            try {
-                outputStream.close();
-                successorSocket.close();
-            } catch (IOException ex) {
-                System.err.println("[ERROR] Problem occurred when closing socket with successor name server.");
-            }
+            outputStream.writeUnshared(visitedServers);
         } catch (IOException e) {
             System.err.println("[ERROR] Problem occurred when forwarding request to successor name server.");
+        } finally {
+            try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
+            try { if (inputStream != null) outputStream.close(); } catch (IOException e) { }
+            try { if (successorSocket != null) successorSocket.close(); } catch (IOException e) { }
         }
     }
 
@@ -204,27 +209,28 @@ public class BootstrapNameServer implements Runnable {
     private void moveStoredObjects(ObjectOutputStream outputStream, int rangeStart, int rangeEnd) throws IOException {
         if (rangeStart < rangeEnd) {
             NavigableMap<Integer, String> nameServerObjects = objects.subMap(rangeStart, true, rangeEnd, true);
-            outputStream.writeObject(new TreeMap<>(nameServerObjects));
+            outputStream.writeUnshared(nameServerObjects);
+            outputStream.flush();
 
-            // Removes this range of keys from the objects tree map, but not the new
-            // name server TreeMap.
+            // Removes this range of keys from the objects tree map after sent.
             nameServerObjects.clear();
-        } else {
-            // Okay, not gonna both implementing this because we can safely assume with
-            // the project description that bootstrap will ALWAYS be ID of 0. For some
-            // reason we still have to read the ID from the config file??? In the case
-            // were you'd actually want to implement this stuff, there are a bunch of
-            // lingering flaws in this project with not checking if a new index go out of
-            // bounds of the possible server IDs (Name server IDs allowed are between
-            // [0, 1024].
-        }
+        } // else {
+        // Okay, not gonna both implementing this because we can safely assume with
+        // the project description that bootstrap will ALWAYS be ID of 0. For some
+        // reason we still have to read the ID from the config file??? In the case
+        // were you'd actually want to implement this stuff, there are a bunch of
+        // lingering flaws in this project with not checking if a new index go out of
+        // bounds of the possible server IDs (Name server IDs allowed are between
+        // [0, 1024].
+        // }
+
     }
 
     private void immediateEntry(ObjectOutputStream outputStream, boolean firstEntry) throws IOException {
-        // Successfully added immediately;
-        // IDs (bootstrap ID), IDs of traversed name servers (just bootstrap ID).
+        // Successfully added immediately
         outputStream.writeBoolean(true);
         outputStream.writeBoolean(firstEntry);
+        outputStream.flush();
 
         if (firstEntry) {
             // Key range
@@ -232,7 +238,7 @@ public class BootstrapNameServer implements Runnable {
             outputStream.writeInt(rangeStart);
         } else {
             // New name server will contact bootstrap's predecessor and exchange info
-            outputStream.writeObject(predecessorAddr);
+            outputStream.writeUnshared(predecessorAddr);
             outputStream.writeInt(predecessorPort);
         }
 
@@ -247,18 +253,19 @@ public class BootstrapNameServer implements Runnable {
     private void nameServerEnter(ObjectInputStream inputStream, ObjectOutputStream outputStream) {
         try {
             // Read new name server info
-            final int newID = inputStream.readInt();
-            final InetAddress newAddr = InetAddress.getByName(inputStream.readUTF());
-            final int newPort = inputStream.readInt();
+            int newID = inputStream.readInt();
+            InetAddress newAddr = InetAddress.getByName(inputStream.readUTF());
+            int newPort = inputStream.readInt();
 
             // Check if ID is in use
             if ((newID == bootstrapID || newID == successor)) {
                 // Name server should print error and panic
-                outputStream.writeBoolean(false);
+                outputStream.writeBoolean(true);
                 outputStream.flush();
                 return;
             }
-            outputStream.writeBoolean(true);
+            outputStream.writeBoolean(false);
+            outputStream.flush();
 
             if (successor == bootstrapID) {
                 // First name server added
@@ -358,8 +365,9 @@ public class BootstrapNameServer implements Runnable {
                 response = "Insert failed, message reached back to bootstrap server.";
             } else if (command.equals("insert_found")) {
                 int key = inputStream.readInt();
+                String value = inputStream.readUTF();
                 int[] visitedServers = (int[]) inputStream.readObject();
-                response = insertValueResponse(key, visitedServers);
+                response = insertValueResponse(key, value, visitedServers);
             } else if (command.equals("delete")) {
                 // Delete failed
                 int key = inputStream.readInt();
@@ -400,28 +408,28 @@ public class BootstrapNameServer implements Runnable {
      */
     private void acceptConnections() {
         while (true) {
+            Socket sock = null;
+            ObjectInputStream inputStream = null;
+            ObjectOutputStream outputStream = null;
+
             try {
-                Socket sock = serverSocket.accept();
-                ObjectInputStream inputStream = new ObjectInputStream(sock.getInputStream());
-                ObjectOutputStream outputStream = new ObjectOutputStream(sock.getOutputStream());
+                sock = serverSocket.accept();
+                inputStream = new ObjectInputStream(sock.getInputStream());
+                outputStream = new ObjectOutputStream(sock.getOutputStream());
 
                 String command = inputStream.readUTF();
                 handleCommand(command, inputStream, outputStream);
-
-                try {
-                    inputStream.close();
-                    outputStream.close();
-                    sock.close();
-                } catch (IOException ex) {
-                    System.err.println("[ERROR] Error closing streams & socket of new connection.");
-                }
             } catch (IOException e) {
                 System.err.println("[ERROR] New connection failed.");
+            } finally {
+                try { if (inputStream != null) inputStream.close(); } catch (IOException e) { }
+                try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
+                try { if (sock != null) sock.close(); } catch (IOException e) { }
             }
         }
     }
 
-    public void exit() {
+    public void shutdown() {
         try {
             serverSocket.close();
             // How did I handle this in proj 3?
@@ -439,7 +447,11 @@ public class BootstrapNameServer implements Runnable {
         // Index should be between 0 and (MAX_OBJECT_COUNT - 1)
         if (index < 0 && index >= MAX_OBJECT_AMOUNT) throw new IndexOutOfBoundsException();
 
-        return index >= rangeStart && index <= rangeEnd;
+       if (rangeStart <= rangeEnd) {
+           return index >= rangeStart && index <= rangeEnd;
+       } else {
+            return index >= rangeStart || index <= rangeEnd;
+       }
     }
 
     /*
@@ -470,6 +482,8 @@ public class BootstrapNameServer implements Runnable {
         } catch (IOException e) {
             System.err.println("[ERROR] Unable to create server socket.");
             System.exit(1);
+        } finally {
+            try { if (serverSocket != null) serverSocket.close(); } catch (IOException e) { }
         }
     }
 }

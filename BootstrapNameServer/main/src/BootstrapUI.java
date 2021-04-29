@@ -41,7 +41,7 @@ public class BootstrapUI implements Runnable {
         String command = input[0].toLowerCase();
 
         if (command.equals("quit")) {
-            bootstrapServer.exit();
+            bootstrapServer.shutdown();
             return false;
         } else if (command.equals("lookup")) {
             int key = Integer.parseInt(input[1]);

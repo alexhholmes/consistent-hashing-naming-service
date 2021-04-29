@@ -15,7 +15,7 @@ public class NameServerUI implements Runnable {
     /*
      * Prints response and reprints user input prompt.
      */
-    public void printResponse(String response) {
+    public void printMessage(String response) {
         if (response != null) {
             syncPrint("\n", response, "\n", PROMPT);
         }
@@ -37,19 +37,22 @@ public class NameServerUI implements Runnable {
 
 
     private boolean readUserInput() {
-        // TODO
+        syncPrint(PROMPT);
+        String[] input = scan.nextLine().split(" ");
+        String command = input[0].toLowerCase();
+
         if (command.equals("quit")) {
-            // TODO handle name server shutdown
+            nameServer.exit();
+            nameServer.shutdown();
             return false;
         } else if (command.equals("enter")) {
-
+            nameServer.enter();
         } else if (command.equals("exit")) {
-
+            nameServer.exit();
         } else {
             syncPrint("[ERROR] Unknown command.\n");
         }
-
-        return false;
+        return true;
     }
 
     @Override
