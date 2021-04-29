@@ -107,12 +107,12 @@ public class NameServer implements Runnable {
         return buildEntrySuccessMessage(new int[] { bootstrapID });
     }
 
-    public void enter() {
+    public String enter() {
         if (connected) {
-            nameServerUI.printMessage("[ERROR] Already connected.");
-            return;
+            return "[ERROR] Already connected.";
         }
 
+        String returnMessage = null;
         Socket bootstrapSocket = null;
         ObjectOutputStream outputStream = null;
         ObjectInputStream inputStream = null;
@@ -139,9 +139,8 @@ public class NameServer implements Runnable {
             // Message was forwarded to bootstrap's successor name server, will have
             // to wait to receive an "enter_success" command from new successor.
             if (inputStream.readBoolean()) {
-                String message = immediateEntry(inputStream);
+                returnMessage = immediateEntry(inputStream);
                 objects.putAll((NavigableMap<Integer, String>) inputStream.readObject());
-                nameServerUI.printMessage(message);
             }
 
             connected = true;
@@ -155,9 +154,16 @@ public class NameServer implements Runnable {
             try { if (inputStream != null) inputStream.close(); } catch (IOException e) { }
             try { if (bootstrapSocket != null) bootstrapSocket.close(); } catch (IOException e) { }
         }
+
+        return returnMessage;
     }
 
-    public void exit() {
+    public String exit() {
+        if (!connected) {
+            return "[ERROR] Already disconnected.";
+        }
+
+
         // TODO
     }
 
