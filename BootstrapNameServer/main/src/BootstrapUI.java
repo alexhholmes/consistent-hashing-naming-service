@@ -48,7 +48,7 @@ public class BootstrapUI implements Runnable {
                 syncPrint("[ERROR] lookup <key>\n");
             } else {
                 int key = Integer.parseInt(input[1]);
-                bootstrapServer.lookupKey(key);
+                syncPrint(bootstrapServer.lookupKey(key) + "\n");
             }
         } else if (command.equals("insert")) {
             if (input.length != 3) {
@@ -56,14 +56,14 @@ public class BootstrapUI implements Runnable {
             } else {
                 int key = Integer.parseInt(input[1]);
                 String value = input[2];
-                bootstrapServer.insertValue(key, value);
+                syncPrint(bootstrapServer.insertValue(key, value) + "\n");
             }
         } else if (command.equals("delete")) {
             if (input.length != 2) {
                 syncPrint("[ERROR] delete <key>\n");
             } else {
                 int key = Integer.parseInt(input[1]);
-                bootstrapServer.deleteKey(key);
+                syncPrint(bootstrapServer.deleteKey(key) + "\n");
             }
         } else {
             syncPrint("[ERROR] Unknown command.\n");

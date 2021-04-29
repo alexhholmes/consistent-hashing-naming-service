@@ -52,63 +52,60 @@ public class BootstrapNameServer implements Runnable {
      * Looks up a key in local storage, if key is not in key local key range, looks for it
      * in the distributed system. CALLED BY BOOTSTRAP UI.
      */
-    public void lookupKey(final int key) {
+    public String lookupKey(final int key) {
         final int[] visitedServers = new int[] { 0 };
         if (betweenRange(key, rangeStart, rangeEnd)) {
             // Key should be stored on this bootstrap server
             if (objects.containsKey(key)) {
                 // Key found on this server, immediately reply to user
-                String response = lookupKeyResponse(key, objects.get(key), visitedServers);
-                bootstrapUI.printResponse(response);
+                return lookupKeyResponse(key, objects.get(key), visitedServers);
             } else {
                 // No other name servers and object not found, immediately reply to user
-                String response = lookupKeyResponse(key, null, visitedServers);
-                bootstrapUI.printResponse(response);
+                return lookupKeyResponse(key, null, visitedServers);
             }
-        } else {
-            // Pass lookup message to successor
-            forwardCommand("lookup", key, visitedServers);
         }
+
+        // Pass lookup message to successor
+        forwardCommand("lookup", key, visitedServers);
+        return null;
     }
 
     /*
      * Inserts a value in local storage, if local storage is not in key range, inserts it
      * in the distributed system. CALLED BY BOOTSTRAP UI.
      */
-    public void insertValue(int key, String value) {
+    public String insertValue(int key, String value) {
         final int[] visitedServers = new int[] { 0 };
         if (betweenRange(key, rangeStart, rangeEnd)) {
             // Store object on this server
             objects.put(key, value);
-            String response = insertValueResponse(key, value, visitedServers);
-            bootstrapUI.printResponse(response);
-        } else {
-            // Pass insert message to successor
-            forwardCommand("insert", key, value, visitedServers);
+            return insertValueResponse(key, value, visitedServers);
         }
+
+        // Pass insert message to successor
+        forwardCommand("insert", key, value, visitedServers);
+        return null;
     }
 
     /*
      * Deletes a key in local storage, if local storage is not in key range, deletes it in
      * the distributed system. CALLED BY BOOTSTRAP UI.
      */
-    public void deleteKey(int key) {
+    public String deleteKey(int key) {
         final int[] visitedServers = new int[] { 0 };
         if (betweenRange(key, rangeStart, rangeEnd)) {
             if (objects.containsKey(key)) {
                 // Key found on this server, immediately reply to user
                 objects.remove(key);
-                String response = deleteKeyResponse(key, true, visitedServers);
-                bootstrapUI.printResponse(response);
+                return deleteKeyResponse(key, true, visitedServers);
             } else {
                 // Object not found, immediately reply to user
-                String response = deleteKeyResponse(key, false, visitedServers);
-                bootstrapUI.printResponse(response);
+                return deleteKeyResponse(key, false, visitedServers);
             }
-        } else {
-            // Pass delete message to successor
-            forwardCommand("delete", key, visitedServers);
         }
+        // Pass delete message to successor
+        forwardCommand("delete", key, visitedServers);
+        return null;
     }
 
     /*
