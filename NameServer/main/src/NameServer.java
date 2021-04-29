@@ -50,8 +50,33 @@ public class NameServer implements Runnable {
         this.objects = new TreeMap<>();
     }
 
+    private void messageNewPredecessor() {
+        Socket predecessorSocket = null;
+        ObjectOutputStream outputStream = null;
+        ObjectInputStream inputStream = null;
+
+        try {
+            predecessorSocket = new Socket(predecessorAddr, predecessorPort);
+            outputStream = new ObjectOutputStream(predecessorSocket.getOutputStream());
+            inputStream = new ObjectInputStream(predecessorSocket.getInputStream());
+
+            outputStream.writeUTF("new_successor");
+            outputStream.writeInt(nameServerID);
+            outputStream.writeObject(nameServerAddr);
+            outputStream.writeInt(nameServerPort);
+            outputStream.flush();
+        } catch (IOException e) {
+            System.err.println("[ERROR] Problem occurred when forwarding request to bootstrap name server.");
+        } finally {
+            try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
+            try { if (inputStream != null) inputStream.close(); } catch (IOException e) { }
+            try { if (predecessorSocket != null) predecessorSocket.close(); } catch (IOException e) { }
+        }
+}
+
     private void immediateEntry(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
         boolean isFirstEntry = inputStream.readBoolean();
+
         if (isFirstEntry) {
             rangeStart = inputStream.readInt();
             rangeEnd = nameServerID;
@@ -63,6 +88,7 @@ public class NameServer implements Runnable {
             successorPort = predecessorPort = bootstrapServerPort;
         } else {
             // Must contact predecessor and exchange info
+            predecessor = inputStream.readInt();
             predecessorAddr = (InetAddress) inputStream.readObject();
             predecessorPort = inputStream.readInt();
 
@@ -71,6 +97,11 @@ public class NameServer implements Runnable {
             successor = bootstrapID;
             successorAddr = bootstrapServerAddr;
             successorPort = bootstrapServerPort;
+
+            rangeStart = predecessor + 1;
+            rangeEnd = nameServerID;
+
+            messageNewPredecessor();
         }
     }
 
@@ -106,9 +137,8 @@ public class NameServer implements Runnable {
             }
         } catch (IOException e) {
             System.err.println("[ERROR] Problem occurred when forwarding request to bootstrap name server.");
-            e.printStackTrace();
         } catch (ClassNotFoundException e) {
-            System.err.println(e.getStackTrace());
+            e.printStackTrace();
             System.exit(1);
         } finally {
             try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
@@ -118,7 +148,7 @@ public class NameServer implements Runnable {
     }
 
     public void exit() {
-
+        // TODO
     }
 
     private void messageBootstrap(String command, int key, int[] visitedServers) {
@@ -153,7 +183,7 @@ public class NameServer implements Runnable {
             outputStream.writeUTF(command);
             outputStream.writeInt(key);
             if (value != null) outputStream.writeUTF(value);
-            outputStream.writeUnshared(visitedServers);
+            outputStream.writeObject(visitedServers);
             outputStream.flush();
         } catch (IOException e) {
             if (addr == bootstrapServerAddr) {
@@ -164,6 +194,31 @@ public class NameServer implements Runnable {
         } finally {
             try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
             try { if (inputStream != null) inputStream.close(); } catch (IOException e) { }
+            try { if (successorSocket != null) successorSocket.close(); } catch (IOException e) { }
+        }
+    }
+
+    private void forwardCommand(String command, int newNameServerID, InetAddress newNameServerAddr,
+                                int newNameServerPort, int[] visitedServers) {
+        Socket successorSocket = null;
+        ObjectOutputStream outputStream = null;
+        ObjectInputStream inputStream = null;
+
+        try {
+            successorSocket = new Socket(successorAddr, successorPort);
+            outputStream = new ObjectOutputStream(successorSocket.getOutputStream());
+            inputStream = new ObjectInputStream(successorSocket.getInputStream());
+
+            outputStream.writeUTF(command);
+            outputStream.writeInt(newNameServerID);
+            outputStream.writeObject(newNameServerAddr);
+            outputStream.writeInt(newNameServerPort);
+            outputStream.writeObject(visitedServers);
+        } catch (IOException e) {
+            System.err.println("[ERROR] Problem occurred when forwarding request to successor name server.");
+        } finally {
+            try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
+            try { if (inputStream != null) outputStream.close(); } catch (IOException e) { }
             try { if (successorSocket != null) successorSocket.close(); } catch (IOException e) { }
         }
     }
@@ -236,6 +291,136 @@ public class NameServer implements Runnable {
         return message;
     }
 
+    /*
+     * Moves the (exclusive) range of keys from this name server to the new name server.
+     */
+    private void moveStoredObjects(ObjectOutputStream outputStream, int rangeStart, int rangeEnd) throws IOException {
+        if (rangeStart < rangeEnd) {
+            NavigableMap<Integer, String> nameServerObjects = objects.subMap(rangeStart, false, rangeEnd, false);
+            outputStream.writeObject(nameServerObjects);
+            outputStream.flush();
+
+            // Removes this range of keys from the objects tree map after sent.
+            nameServerObjects.clear();
+        } // else {
+        // Okay, not gonna both implementing this because we can safely assume with
+        // the project description that bootstrap will ALWAYS be ID of 0. For some
+        // reason we still have to read the ID from the config file??? In the case
+        // were you'd actually want to implement this stuff, there are a bunch of
+        // lingering flaws in this project with not checking if a new index go out of
+        // bounds of the possible server IDs (Name server IDs allowed are between
+        // [0, 1024].
+        // }
+
+    }
+
+    private int[] enterComplete(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
+        // New successor
+        successor = inputStream.readInt();
+        successorAddr = (InetAddress) inputStream.readObject();
+        successorPort = inputStream.readInt();
+
+        // New predecessor
+        predecessor = inputStream.readInt();
+        predecessorAddr = (InetAddress) inputStream.readObject();
+        predecessorPort = inputStream.readInt();
+
+        // New ranges
+        rangeStart = predecessor + 1;
+        rangeEnd = nameServerID;
+
+        int[] visitedServers = (int[]) inputStream.readObject();
+
+        // Initial key/value pairs
+        objects.putAll((NavigableMap<Integer, String>) inputStream.readObject());
+
+        return visitedServers;
+    }
+
+    private void sendEnterComplete(int oldPredecessor, int[] visitedServers) {
+        Socket predecessorSocket = null;
+        ObjectOutputStream outputStream = null;
+        ObjectInputStream inputStream = null;
+
+        try {
+            predecessorSocket = new Socket(predecessorAddr, predecessorPort);
+            outputStream = new ObjectOutputStream(predecessorSocket.getOutputStream());
+            inputStream = new ObjectInputStream(predecessorSocket.getInputStream());
+
+            // New name server becomes predecessor to this name server
+            outputStream.writeInt(nameServerID);
+            outputStream.writeObject(nameServerAddr);
+            outputStream.writeInt(nameServerPort);
+
+            outputStream.writeInt(predecessor);
+            outputStream.writeObject(predecessorAddr);
+            outputStream.writeInt(predecessorPort);
+
+            outputStream.writeObject(visitedServers);
+
+            moveStoredObjects(outputStream, oldPredecessor, nameServerID);
+        } catch (IOException e) {
+            System.err.println("[ERROR] Problem occurred when forwarding request to successor name server.");
+        } finally {
+            try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
+            try { if (inputStream != null) outputStream.close(); } catch (IOException e) { }
+            try { if (predecessorSocket != null) predecessorSocket.close(); } catch (IOException e) { }
+        }
+    }
+
+    private void nameServerEnter(ObjectInputStream inputStream, ObjectOutputStream outputStream) {
+        try {
+            // Read new name server info
+            int newID = inputStream.readInt();
+            InetAddress newAddr = InetAddress.getByName(inputStream.readUTF());
+            int newPort = inputStream.readInt();
+            int[] visitedServers = (int[]) inputStream.readObject();
+
+            // Add this name server's ID to the list
+            visitedServers = appendVisitedID(visitedServers);
+
+            // Check if ID is in use
+            if ((newID == nameServerID || newID == successor)) {
+                // Name server should print error and panic
+                // TODO contact name server directly with "invalid_id"
+                return;
+            }
+
+            if (betweenRange(newID, successor, nameServerID)) {
+                // Update name server's predecessor
+                int oldPredecessor = predecessor;
+                predecessor = newID;
+                predecessorAddr = newAddr;
+                predecessorPort = newPort;
+
+                sendEnterComplete(oldPredecessor, visitedServers);
+
+                // Update name server's key ranges
+                // THIS SHOULD BE DONE AFTER sendEnterComplete()!!!
+                // Key/Values must be transferred first!
+                rangeStart = newID + 1;
+                // rangeEnd always stays the same; rangeEnd == nameServerID
+
+                outputStream.flush();
+            } else {
+                // Forwarding name server entry to successor
+
+                // Name server that becomes the new node's successor will directly contact
+                // the new node upon successful entry.
+                forwardCommand("entry", newID, newAddr, newPort, visitedServers);
+            }
+        } catch (IOException e) {
+            System.err.println("[ERROR] Connection problem occurred when adding new name server.");
+        } catch (ClassNotFoundException e) {
+            // Should not happen, exit program
+            System.err.println("[ERROR] Input stream failure.");
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        // Streams and socket are closed by calling function
+    }
+
     private void handleCommand(String command, ObjectInputStream inputStream, ObjectOutputStream outputStream) {
         String message = null;
 
@@ -259,7 +444,16 @@ public class NameServer implements Runnable {
                 int[] visitedServers = (int[]) inputStream.readObject();
                 message = deleteKey(key, visitedServers);
             } else if (command.equals("enter")) {
-                // TODO
+                nameServerEnter(inputStream, outputStream);
+                message = null; // TODO?
+            } else if (command.equals("enter_complete")) {
+                enterComplete(inputStream);
+                messageNewPredecessor();
+                message = "TODO"; // TODO
+            } else if (command.equals("new_successor")) {
+                this.successor = inputStream.readInt();
+                this.successorAddr = (InetAddress) inputStream.readObject();
+                this.successorPort = inputStream.readInt();
             } else if (command.equals("exit")) {
                 // TODO
             } else {
@@ -268,7 +462,6 @@ public class NameServer implements Runnable {
         } catch (IOException e) {
             // Close streams & socket, let client crash
             message = "[ERROR] New connection i/o failed.";
-            e.printStackTrace();
         } catch (ClassNotFoundException e) {
             // Should not happen, exit program
             System.err.println("[ERROR] Input stream failure.");
@@ -342,7 +535,11 @@ public class NameServer implements Runnable {
         // Index should be between 0 and (MAX_OBJECT_COUNT - 1)
         if (index < 0 && index >= MAX_OBJECT_AMOUNT) throw new IndexOutOfBoundsException();
 
-        return index >= rangeStart && index <= rangeEnd;
+        if (rangeStart <= rangeEnd) {
+            return index >= rangeStart && index <= rangeEnd;
+        } else {
+            return index >= rangeStart || index <= rangeEnd;
+        }
     }
 
     public void shutdown() {

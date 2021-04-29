@@ -167,7 +167,7 @@ public class BootstrapNameServer implements Runnable {
             outputStream.writeUTF(command);
             outputStream.writeInt(key);
             if (value != null) outputStream.writeUTF(value);
-            outputStream.writeUnshared(visitedServers);
+            outputStream.writeObject(visitedServers);
 
         } catch (IOException e) {
             System.err.println("[ERROR] Problem occurred when forwarding request to successor name server.");
@@ -191,9 +191,9 @@ public class BootstrapNameServer implements Runnable {
 
             outputStream.writeUTF(command);
             outputStream.writeInt(newNameServerID);
-            outputStream.writeUnshared(newNameServerAddr);
+            outputStream.writeObject(newNameServerAddr);
             outputStream.writeInt(newNameServerPort);
-            outputStream.writeUnshared(visitedServers);
+            outputStream.writeObject(visitedServers);
         } catch (IOException e) {
             System.err.println("[ERROR] Problem occurred when forwarding request to successor name server.");
         } finally {
@@ -204,12 +204,12 @@ public class BootstrapNameServer implements Runnable {
     }
 
     /*
-     * Moves the (inclusive) range of keys from this name server to the new name server.
+     * Moves the (exclusive) range of keys from this name server to the new name server.
      */
     private void moveStoredObjects(ObjectOutputStream outputStream, int rangeStart, int rangeEnd) throws IOException {
         if (rangeStart < rangeEnd) {
-            NavigableMap<Integer, String> nameServerObjects = objects.subMap(rangeStart, true, rangeEnd, true);
-            outputStream.writeUnshared(nameServerObjects);
+            NavigableMap<Integer, String> nameServerObjects = objects.subMap(rangeStart, false, rangeEnd, false);
+            outputStream.writeObject(nameServerObjects);
             outputStream.flush();
 
             // Removes this range of keys from the objects tree map after sent.
@@ -238,7 +238,8 @@ public class BootstrapNameServer implements Runnable {
             outputStream.writeInt(rangeStart);
         } else {
             // New name server will contact bootstrap's predecessor and exchange info
-            outputStream.writeUnshared(predecessorAddr);
+            outputStream.writeInt(predecessor);
+            outputStream.writeObject(predecessorAddr);
             outputStream.writeInt(predecessorPort);
         }
 
@@ -271,7 +272,7 @@ public class BootstrapNameServer implements Runnable {
                 // First name server added
                 // Notify of immediate entry and send successor/predecessor info.
                 immediateEntry(outputStream, true);
-                moveStoredObjects(outputStream, bootstrapID + 1, newID);
+                moveStoredObjects(outputStream, bootstrapID, newID);
 
                 // Update bootstrap's successor/predecessor
                 successor = predecessor = newID;
@@ -286,7 +287,7 @@ public class BootstrapNameServer implements Runnable {
             } else if (betweenRange(newID, successor, bootstrapID)) { // Already checked if newID does not equal bootstrapID & successorID
                 // New name server becomes predecessor to bootstrap server
                 immediateEntry(outputStream, false);
-                moveStoredObjects(outputStream, predecessor + 1, newID);
+                moveStoredObjects(outputStream, predecessor, newID);
 
                 // Update bootstrap's predecessor
                 predecessor = newID;
@@ -306,16 +307,13 @@ public class BootstrapNameServer implements Runnable {
 
                 // Name server that becomes the new node's successor will directly contact
                 // the new node upon successful entry.
-                forwardCommand("entry", newID, newAddr, newPort, new int[] { 0 });
+                forwardCommand("enter", newID, newAddr, newPort, new int[] { 0 });
             }
         } catch (IOException e) {
             System.err.println("[ERROR] Connection problem occurred when adding new name server.");
         }
-        // Streams and socket are closed by calling function
-    }
 
-    private void newSuccessor() {
-        // TODO
+        // Streams and socket are closed by calling function
     }
 
     /*
@@ -382,7 +380,9 @@ public class BootstrapNameServer implements Runnable {
                 nameServerEnter(inputStream, outputStream);
                 response = null; // TODO?
             } else if (command.equals("new_successor")) {
-                newSuccessor();
+                this.successor = inputStream.readInt();
+                this.successorAddr = (InetAddress) inputStream.readObject();
+                this.successorPort = inputStream.readInt();
                 response = null;
             } else if (command.equals("exit")) {
                 // Deregister name server
@@ -397,6 +397,7 @@ public class BootstrapNameServer implements Runnable {
         } catch (ClassNotFoundException e) {
             // Should not happen, exit program
             System.err.println("[ERROR] Input stream failure.");
+            e.printStackTrace();
             System.exit(1);
         }
 
