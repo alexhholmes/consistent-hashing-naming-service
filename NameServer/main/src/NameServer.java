@@ -74,14 +74,15 @@ public class NameServer implements Runnable {
         }
 }
 
-    private void immediateEntry(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
+    private String immediateEntry(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
         boolean isFirstEntry = inputStream.readBoolean();
+        int bootstrapID;
 
         if (isFirstEntry) {
             rangeStart = inputStream.readInt();
             rangeEnd = nameServerID;
 
-            int bootstrapID = inputStream.readInt();
+            bootstrapID = inputStream.readInt();
 
             successor = predecessor = bootstrapID;
             successorAddr = predecessorAddr = bootstrapServerAddr;
@@ -92,7 +93,7 @@ public class NameServer implements Runnable {
             predecessorAddr = (InetAddress) inputStream.readObject();
             predecessorPort = inputStream.readInt();
 
-            int bootstrapID = inputStream.readInt();
+            bootstrapID = inputStream.readInt();
 
             successor = bootstrapID;
             successorAddr = bootstrapServerAddr;
@@ -103,6 +104,7 @@ public class NameServer implements Runnable {
 
             messageNewPredecessor();
         }
+        return buildEntrySuccessMessage(new int[] { bootstrapID });
     }
 
     public void enter() {
@@ -132,8 +134,9 @@ public class NameServer implements Runnable {
             // Message was forwarded to bootstrap's successor name server, will have
             // to wait to receive an "enter_success" command from new successor.
             if (inputStream.readBoolean()) {
-                immediateEntry(inputStream);
+                String message = immediateEntry(inputStream);
                 objects.putAll((NavigableMap<Integer, String>) inputStream.readObject());
+                nameServerUI.printMessage(message);
             }
         } catch (IOException e) {
             System.err.println("[ERROR] Problem occurred when forwarding request to bootstrap name server.");
@@ -314,7 +317,15 @@ public class NameServer implements Runnable {
 
     }
 
-    private int[] enterComplete(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
+    private String buildEntrySuccessMessage(int[] visitedServers) {
+        return "Successful entry.\n" +
+                "Key Range: " + rangeStart + "-" + rangeEnd + "\n" +
+                "Predecessor: " + predecessor + "\n" +
+                "Successor: " + successor + "\n" +
+                "Visited Servers: " + visitedToString(visitedServers);
+    }
+
+    private String enterComplete(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
         // New successor
         successor = inputStream.readInt();
         successorAddr = (InetAddress) inputStream.readObject();
@@ -334,7 +345,7 @@ public class NameServer implements Runnable {
         // Initial key/value pairs
         objects.putAll((NavigableMap<Integer, String>) inputStream.readObject());
 
-        return visitedServers;
+        return buildEntrySuccessMessage(visitedServers);
     }
 
     /*
@@ -419,6 +430,7 @@ public class NameServer implements Runnable {
                 // the new node upon successful entry.
                 forwardCommand("entry", newID, newAddr, newPort, visitedServers);
             }
+
         } catch (IOException e) {
             System.err.println("[ERROR] Connection problem occurred when adding new name server.");
             e.printStackTrace();
@@ -456,11 +468,10 @@ public class NameServer implements Runnable {
                 message = deleteKey(key, visitedServers);
             } else if (command.equals("enter")) {
                 nameServerEnter(inputStream, outputStream);
-                message = null; // TODO?
+                message = null;
             } else if (command.equals("enter_complete")) {
-                enterComplete(inputStream);
+                message = enterComplete(inputStream);
                 messageNewPredecessor();
-                message = "TODO"; // TODO
             } else if (command.equals("new_successor")) {
                 this.successor = inputStream.readInt();
                 this.successorAddr = (InetAddress) inputStream.readObject();
