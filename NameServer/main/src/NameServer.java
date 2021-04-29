@@ -337,7 +337,11 @@ public class NameServer implements Runnable {
         return visitedServers;
     }
 
-    private void sendEnterComplete(int oldPredecessor, int[] visitedServers) {
+    /*
+     * Notifies new name server that they have been entered. Sends new name server's new
+     * successor/predecessor info and transfers stored objects.
+     */
+    private void sendEnterComplete(int oldPredecessor, InetAddress oldPredecessorAddr, int oldPredecessorPort, int[] visitedServers) {
         Socket predecessorSocket = null;
         ObjectOutputStream outputStream = null;
         ObjectInputStream inputStream = null;
@@ -347,20 +351,23 @@ public class NameServer implements Runnable {
             outputStream = new ObjectOutputStream(predecessorSocket.getOutputStream());
             inputStream = new ObjectInputStream(predecessorSocket.getInputStream());
 
+            outputStream.writeUTF("enter_complete");
+
             // New name server becomes predecessor to this name server
             outputStream.writeInt(nameServerID);
             outputStream.writeObject(nameServerAddr);
             outputStream.writeInt(nameServerPort);
 
-            outputStream.writeInt(predecessor);
-            outputStream.writeObject(predecessorAddr);
-            outputStream.writeInt(predecessorPort);
+            outputStream.writeInt(oldPredecessor);
+            outputStream.writeObject(oldPredecessorAddr);
+            outputStream.writeInt(oldPredecessorPort);
 
             outputStream.writeObject(visitedServers);
 
-            moveStoredObjects(outputStream, oldPredecessor, nameServerID);
+            moveStoredObjects(outputStream, oldPredecessor, predecessor);
         } catch (IOException e) {
-            System.err.println("[ERROR] Problem occurred when forwarding request to successor name server.");
+            System.err.println("[ERROR] Problem occurred when notifying new predecessor name server.");
+            e.printStackTrace();
         } finally {
             try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
             try { if (inputStream != null) outputStream.close(); } catch (IOException e) { }
@@ -372,7 +379,7 @@ public class NameServer implements Runnable {
         try {
             // Read new name server info
             int newID = inputStream.readInt();
-            InetAddress newAddr = InetAddress.getByName(inputStream.readUTF());
+            InetAddress newAddr = (InetAddress) inputStream.readObject();
             int newPort = inputStream.readInt();
             int[] visitedServers = (int[]) inputStream.readObject();
 
@@ -386,14 +393,17 @@ public class NameServer implements Runnable {
                 return;
             }
 
-            if (betweenRange(newID, successor, nameServerID)) {
+            if (betweenRange(newID, predecessor, nameServerID)) {
                 // Update name server's predecessor
                 int oldPredecessor = predecessor;
+                InetAddress oldPredecessorAddr = predecessorAddr;
+                int oldPredecessorPort = predecessorPort;
+
                 predecessor = newID;
                 predecessorAddr = newAddr;
                 predecessorPort = newPort;
 
-                sendEnterComplete(oldPredecessor, visitedServers);
+                sendEnterComplete(oldPredecessor, oldPredecessorAddr, oldPredecessorPort, visitedServers);
 
                 // Update name server's key ranges
                 // THIS SHOULD BE DONE AFTER sendEnterComplete()!!!
@@ -411,6 +421,7 @@ public class NameServer implements Runnable {
             }
         } catch (IOException e) {
             System.err.println("[ERROR] Connection problem occurred when adding new name server.");
+            e.printStackTrace();
         } catch (ClassNotFoundException e) {
             // Should not happen, exit program
             System.err.println("[ERROR] Input stream failure.");
@@ -457,7 +468,7 @@ public class NameServer implements Runnable {
             } else if (command.equals("exit")) {
                 // TODO
             } else {
-                message = "Unknown command received from predecessor(Name Server " + predecessor + ").";
+                message = "Unknown command received from predecessor(Name Server " + predecessor + "): " + command + ".";
             }
         } catch (IOException e) {
             // Close streams & socket, let client crash
