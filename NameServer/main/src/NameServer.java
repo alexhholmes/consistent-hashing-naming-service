@@ -37,7 +37,7 @@ public class NameServer implements Runnable {
     private InetAddress predecessorAddr;
     private int predecessorPort;
 
-    private volatile boolean connected;
+    private boolean connected;
     private volatile boolean isShutdown;// TODO
 
     public NameServer(int nameServerID, int nameServerPort, String bootstrapServerAddr, int bootstrapServerPort) throws UnknownHostException {
@@ -108,6 +108,11 @@ public class NameServer implements Runnable {
     }
 
     public void enter() {
+        if (connected) {
+            nameServerUI.printMessage("[ERROR] Already connected.");
+            return;
+        }
+
         Socket bootstrapSocket = null;
         ObjectOutputStream outputStream = null;
         ObjectInputStream inputStream = null;
@@ -138,6 +143,8 @@ public class NameServer implements Runnable {
                 objects.putAll((NavigableMap<Integer, String>) inputStream.readObject());
                 nameServerUI.printMessage(message);
             }
+
+            connected = true;
         } catch (IOException e) {
             System.err.println("[ERROR] Problem occurred when forwarding request to bootstrap name server.");
         } catch (ClassNotFoundException e) {

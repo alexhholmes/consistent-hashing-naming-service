@@ -35,7 +35,6 @@ public class NameServerUI implements Runnable {
         }
     }
 
-
     private boolean readUserInput() {
         syncPrint(PROMPT);
         String[] input = scan.nextLine().split(" ");
