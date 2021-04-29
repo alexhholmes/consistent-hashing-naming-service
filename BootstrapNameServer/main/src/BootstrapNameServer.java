@@ -53,6 +53,10 @@ public class BootstrapNameServer implements Runnable {
      * in the distributed system. CALLED BY BOOTSTRAP UI.
      */
     public String lookupKey(final int key) {
+        if (!rangeCheck(key)) {
+            return "Key must be between [0, " + MAX_OBJECT_AMOUNT + "]!";
+        }
+
         final int[] visitedServers = new int[] { 0 };
         if (betweenRange(key, rangeStart, rangeEnd)) {
             // Key should be stored on this bootstrap server
@@ -75,6 +79,10 @@ public class BootstrapNameServer implements Runnable {
      * in the distributed system. CALLED BY BOOTSTRAP UI.
      */
     public String insertValue(int key, String value) {
+        if (!rangeCheck(key)) {
+            return "Key must be between [0, " + MAX_OBJECT_AMOUNT + "]!";
+        }
+
         final int[] visitedServers = new int[] { 0 };
         if (betweenRange(key, rangeStart, rangeEnd)) {
             // Store object on this server
@@ -92,6 +100,10 @@ public class BootstrapNameServer implements Runnable {
      * the distributed system. CALLED BY BOOTSTRAP UI.
      */
     public String deleteKey(int key) {
+        if (!rangeCheck(key)) {
+            return "Key must be between [0, " + MAX_OBJECT_AMOUNT + "]!";
+        }
+
         final int[] visitedServers = new int[] { 0 };
         if (betweenRange(key, rangeStart, rangeEnd)) {
             if (objects.containsKey(key)) {
@@ -450,6 +462,13 @@ public class BootstrapNameServer implements Runnable {
        } else {
             return index >= rangeStart || index <= rangeEnd;
        }
+    }
+
+    /*
+     * Returns true if index is within range of possible keys.
+     */
+    private boolean rangeCheck(int key) {
+        return key >= 0 && key < MAX_OBJECT_AMOUNT;
     }
 
     /*
