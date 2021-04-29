@@ -204,11 +204,11 @@ public class BootstrapNameServer implements Runnable {
     }
 
     /*
-     * Moves the (exclusive) range of keys from this name server to the new name server.
+     * Moves the (inclusive, exclusive) range of keys from this name server to the new name server.
      */
     private void moveStoredObjects(ObjectOutputStream outputStream, int rangeStart, int rangeEnd) throws IOException {
         if (rangeStart < rangeEnd) {
-            NavigableMap<Integer, String> nameServerObjects = objects.subMap(rangeStart, false, rangeEnd, false);
+            NavigableMap<Integer, String> nameServerObjects = objects.subMap(rangeStart, false, rangeEnd, true);
             outputStream.writeObject(nameServerObjects);
             outputStream.flush();
 
