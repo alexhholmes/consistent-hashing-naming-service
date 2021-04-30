@@ -5,7 +5,6 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.util.Arrays;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 
@@ -310,7 +309,7 @@ public class NameServer implements Runnable {
         visitedServers = appendVisitedID(visitedServers);
         String message = buildLogMessage("lookup", key, visitedServers);
 
-        if (betweenRange(key, rangeStart, rangeEnd) && objects.containsKey(key)) {
+        if (betweenRange(key, rangeStart, rangeEnd) && objects.get(key) != null) {
             // Key found, message bootstrap server
             String value = objects.get(key);
             messageBootstrap("lookup_found", key, value, visitedServers);
@@ -348,7 +347,7 @@ public class NameServer implements Runnable {
         visitedServers = appendVisitedID(visitedServers);
         String message = buildLogMessage("insert", key, visitedServers);
 
-        if (betweenRange(key, rangeStart, rangeEnd) && objects.containsKey(key)) {
+        if (betweenRange(key, rangeStart, rangeEnd) && objects.get(key) != null) {
             // Delete key off of this name server
             objects.remove(key);
             messageBootstrap("delete_found", key, visitedServers);

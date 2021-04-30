@@ -60,7 +60,7 @@ public class BootstrapNameServer implements Runnable {
         final int[] visitedServers = new int[] { 0 };
         if (betweenRange(key, rangeStart, rangeEnd)) {
             // Key should be stored on this bootstrap server
-            if (objects.containsKey(key)) {
+            if (objects.get(key) != null) {
                 // Key found on this server, immediately reply to user
                 return lookupKeyResponse(key, objects.get(key), visitedServers);
             } else {
@@ -106,7 +106,7 @@ public class BootstrapNameServer implements Runnable {
 
         final int[] visitedServers = new int[] { 0 };
         if (betweenRange(key, rangeStart, rangeEnd)) {
-            if (objects.containsKey(key)) {
+            if (objects.get(key) != null) {
                 // Key found on this server, immediately reply to user
                 objects.remove(key);
                 return deleteKeyResponse(key, true, visitedServers);
