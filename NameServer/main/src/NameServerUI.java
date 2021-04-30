@@ -45,9 +45,15 @@ public class NameServerUI implements Runnable {
             nameServer.shutdown();
             return false;
         } else if (command.equals("enter")) {
-            syncPrint(nameServer.enter() + "\n");
+            String message = nameServer.enter();
+            if (message != null) {
+                syncPrint(message + "\n");
+            }
         } else if (command.equals("exit")) {
-            syncPrint(nameServer.exit() + "\n");
+            String message = nameServer.exit();
+            if (message != null) {
+                syncPrint(message + "\n");
+            }
         } else {
             syncPrint("[ERROR] Unknown command.\n");
         }

@@ -163,8 +163,63 @@ public class NameServer implements Runnable {
             return "[ERROR] Already disconnected.";
         }
 
+        String returnMessage = null;
 
-        // TODO
+        Socket socket = null;
+        ObjectOutputStream outputStream = null;
+        ObjectInputStream inputStream = null;
+
+        try {
+            if (successor == predecessor) {
+                // Only name server in system, contact bootstrap
+                socket = new Socket(bootstrapServerAddr, bootstrapServerPort);
+                outputStream = new ObjectOutputStream(socket.getOutputStream());
+                inputStream = new ObjectInputStream(socket.getInputStream());
+
+                outputStream.writeUTF("exit");
+                moveStoredObjects(outputStream, rangeStart, rangeEnd);
+                returnMessage = buildExitSuccessMessage();
+            } else {
+                // Contact predecessor
+                socket = new Socket(predecessorAddr, predecessorPort);
+                outputStream = new ObjectOutputStream(socket.getOutputStream());
+                inputStream = new ObjectInputStream(socket.getInputStream());
+
+                outputStream.writeUTF("exit");
+                outputStream.writeBoolean(true); // Let successor know this is its predecessor
+                outputStream.writeInt(successor);
+                outputStream.writeObject(successorAddr);
+                outputStream.writeInt(successorPort);
+
+                try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
+                try { if (inputStream != null) inputStream.close(); } catch (IOException e) { }
+                try { if (socket != null) socket.close(); } catch (IOException e) { }
+
+                // Contact successor and transfer key/values
+                socket = new Socket(successorAddr, successorPort);
+                outputStream = new ObjectOutputStream(socket.getOutputStream());
+                inputStream = new ObjectInputStream(socket.getInputStream());
+
+                outputStream.writeBoolean(false); // Let predecessor know this is its successor
+                outputStream.writeInt(predecessor);
+                outputStream.writeObject(predecessorAddr);
+                outputStream.writeInt(predecessorPort);
+
+                moveStoredObjects(outputStream, rangeStart, rangeEnd);
+
+                returnMessage = buildExitSuccessMessage();
+
+            }
+            connected = false;
+        } catch (IOException e) {
+            System.err.println("[ERROR] Problem occurred when sending exit request to bootstrap name server.");
+        } finally {
+            try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
+            try { if (inputStream != null) inputStream.close(); } catch (IOException e) { }
+            try { if (socket != null) socket.close(); } catch (IOException e) { }
+        }
+
+        return returnMessage;
     }
 
     private void messageBootstrap(String command, int key, int[] visitedServers) {
@@ -338,6 +393,30 @@ public class NameServer implements Runnable {
                 "Visited Servers: " + visitedToString(visitedServers);
     }
 
+    private String buildExitSuccessMessage() {
+        return "Successful exit.\n" +
+                "Key Range: " + rangeStart + "-" + rangeEnd + "\n" +
+                "Successor: " + successor;
+    }
+
+    private void handleExit(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
+        if (inputStream.readBoolean()) {
+            // Successor exited
+            successor = inputStream.readInt();
+            successorAddr = (InetAddress) inputStream.readObject();
+            successorPort = inputStream.readInt();
+        } else {
+            // Predecessor exited
+            predecessor = inputStream.readInt();
+            predecessorAddr = (InetAddress) inputStream.readObject();
+            predecessorPort = inputStream.readInt();
+
+            rangeStart = predecessor + 1;
+
+            objects.putAll((NavigableMap<Integer, String>) inputStream.readObject());
+        }
+    }
+
     private String enterComplete(ObjectInputStream inputStream) throws IOException, ClassNotFoundException {
         // New successor
         successor = inputStream.readInt();
@@ -490,7 +569,8 @@ public class NameServer implements Runnable {
                 this.successorAddr = (InetAddress) inputStream.readObject();
                 this.successorPort = inputStream.readInt();
             } else if (command.equals("exit")) {
-                // TODO
+                handleExit(inputStream);
+                message = null;
             } else {
                 message = "Unknown command received from predecessor(Name Server " + predecessor + "): " + command + ".";
             }

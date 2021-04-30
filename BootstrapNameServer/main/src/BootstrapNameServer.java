@@ -328,8 +328,37 @@ public class BootstrapNameServer implements Runnable {
     /*
      * Remove name server from system.
      */
-    private void nameServerExit(ObjectInputStream inputStream, ObjectOutputStream outputStream) {
-        // TODO
+    private void nameServerExit(ObjectInputStream inputStream, ObjectOutputStream outputStream) throws ClassNotFoundException {
+        try {
+            if (successor == predecessor) {
+                // Last name server exiting
+                successor = predecessor = bootstrapID;
+                rangeStart = 1;
+                rangeEnd = 0;
+                objects.putAll((NavigableMap<Integer, String>) inputStream.readObject());
+            } else {
+                // Adjacent name server exiting
+                if (inputStream.readBoolean()) {
+                    // Successor exited
+                    successor = inputStream.readInt();
+                    successorAddr = (InetAddress) inputStream.readObject();
+                    successorPort = inputStream.readInt();
+                } else {
+                    // Predecessor exited
+                    predecessor = inputStream.readInt();
+                    predecessorAddr = (InetAddress) inputStream.readObject();
+                    predecessorPort = inputStream.readInt();
+
+                    rangeStart = predecessor + 1;
+
+                    objects.putAll((NavigableMap<Integer, String>) inputStream.readObject());
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("[ERROR] Connection problem occurred when adding new name server.");
+            e.printStackTrace();
+        }
+
         // Streams and socket are closed by calling function
     }
 
@@ -387,7 +416,7 @@ public class BootstrapNameServer implements Runnable {
             } else if (command.equals("enter")) {
                 // Register new name server
                 nameServerEnter(inputStream, outputStream);
-                response = null; // TODO?
+                response = null;
             } else if (command.equals("new_successor")) {
                 this.successor = inputStream.readInt();
                 this.successorAddr = (InetAddress) inputStream.readObject();
@@ -396,7 +425,7 @@ public class BootstrapNameServer implements Runnable {
             } else if (command.equals("exit")) {
                 // Deregister name server
                 nameServerExit(inputStream, outputStream);
-                response = null; // TODO?
+                response = null;
             } else {
                 response = "Unknown command received from predecessor(Name Server " + predecessor + ").";
             }
