@@ -200,6 +200,7 @@ public class NameServer implements Runnable {
                 outputStream = new ObjectOutputStream(socket.getOutputStream());
                 inputStream = new ObjectInputStream(socket.getInputStream());
 
+                outputStream.writeUTF("exit");
                 outputStream.writeBoolean(false); // Let predecessor know this is its successor
                 outputStream.writeInt(predecessor);
                 outputStream.writeObject(predecessorAddr);
@@ -212,7 +213,7 @@ public class NameServer implements Runnable {
             }
             connected = false;
         } catch (IOException e) {
-            System.err.println("[ERROR] Problem occurred when sending exit request to bootstrap name server.");
+            System.err.println("[ERROR] Problem occurred when sending exit request to name server.");
         } finally {
             try { if (outputStream != null) outputStream.close(); } catch (IOException e) { }
             try { if (inputStream != null) inputStream.close(); } catch (IOException e) { }
