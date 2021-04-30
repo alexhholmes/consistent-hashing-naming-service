@@ -5,18 +5,18 @@ The Bootstrap Server Listens on port 4780.
 
 ### This project was done in its entirety by Josh, Alex, and Robert. We hereby state that we have not received unauthorized help of any form. 
 
-#### Compile BootstrapDriver (From '~/Bootstrap/src/'):
+#### Compile Driver (From '~/BootstrapNameServer/src/'):
 ```
-$ javac BootstrapDriver.java
+$ javac Driver.java
 ```
 #### Compile NameserverDriver (From '~/Nameserver/src/'):
 ```
 $ javac NameserverDriver.java
 ```
 
-#### Execute BootstrapDriver (From '~/Bootstrap/src/'):
+#### Execute Driver (From '~/BootstrapNameServer/src/'):
 ```
-$ java BootstrapDriver [BOOTSTRAP_NS_CONFIG_FILE]
+$ java Driver [BOOTSTRAP_NS_CONFIG_FILE]
 ```
 #### Execute NameserverDriver (From '~/Nameserver/src/'):
 ```
